@@ -6,10 +6,11 @@ import { errorMessage } from '@/lib/api';
 import { Button, Field, Input } from '@/components/ui';
 
 const DEMO = [
-  { email: 'admin@inventario.local', password: 'Admin123!', label: 'Admin' },
+  { email: 'admin@inventario.local', password: 'Admin123!', label: 'Admin plataforma' },
   { email: 'gerente@inventario.local', password: 'Gerente123!', label: 'Gerente' },
-  { email: 'operador@inventario.local', password: 'Operador123!', label: 'Operador' },
-  { email: 'consulta@inventario.local', password: 'Consulta123!', label: 'Consulta' },
+  { email: 'operador@inventario.local', password: 'Operador123!', label: 'Operador (solo Santiago)' },
+  { email: 'consulta@inventario.local', password: 'Consulta123!', label: 'Consulta (2 empresas)' },
+  { email: 'admin@delsur.cl', password: 'DelSur123!', label: 'Admin Del Sur' },
 ];
 
 export default function LoginPage() {

@@ -24,10 +24,11 @@ function ProductDetail({ id, onClose }: { id: string; onClose: () => void }) {
               ['Código de barras', p.barcode ?? '—'],
               ['Categoría', p.category?.name ?? '—'],
               ['Proveedor', p.supplier?.name ?? '—'],
-              ['Costo promedio', fmtMoney(p.costPrice)],
-              ['Precio de venta', fmtMoney(p.salePrice)],
+              ['Costo promedio (neto)', fmtMoney(p.costPrice)],
+              ['Precio de venta (neto)', <>{fmtMoney(p.salePrice)} {p.taxExempt && <Badge tone="gray">Exento IVA</Badge>}</>],
               ['Stock mín. / máx.', `${p.minStock} / ${p.maxStock ?? '—'}`],
-              ['Stock total', <Badge tone={p.isLowStock ? 'amber' : 'green'}>{fmtNumber(p.totalStock)} {p.unit}</Badge>],
+              ['Físico / reservado', `${fmtNumber(p.totalStock)} / ${fmtNumber(p.reservedStock)}`],
+              ['Disponible', <Badge tone={p.isLowStock ? 'amber' : 'green'}>{fmtNumber(p.availableStock)} {p.unit}</Badge>],
             ].map(([label, value], i) => (
               <div key={i}>
                 <p className="text-xs text-slate-500">{label}</p>
@@ -37,12 +38,18 @@ function ProductDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
           {p.description && <p className="text-sm text-slate-600 dark:text-slate-300">{p.description}</p>}
           <div>
-            <h3 className="mb-2 font-semibold">Existencias por almacén</h3>
+            <h3 className="mb-2 font-semibold">Existencias por sucursal y almacén</h3>
             <div className="flex flex-wrap gap-2">
               {p.stocks?.length ? (
                 p.stocks.map((s) => (
                   <div key={s.warehouse.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-navy-800">
-                    <span className="text-slate-500">{s.warehouse.name}:</span> <span className="font-semibold">{fmtNumber(s.quantity)}</span>
+                    <p className="text-xs text-slate-500">
+                      {s.warehouse.branch.name} · {s.warehouse.code}
+                    </p>
+                    <p>
+                      <span className="font-semibold">{fmtNumber(s.quantity - s.reserved)}</span> disponibles
+                      {s.reserved > 0 && <span className="text-accent-700 dark:text-accent-400"> · {fmtNumber(s.reserved)} reservadas</span>}
+                    </p>
                   </div>
                 ))
               ) : (
@@ -103,11 +110,12 @@ export default function ProductsPage() {
     { name: 'categoryId', label: 'Categoría', type: 'select', options: categories.data?.data.map((c) => ({ value: c.id, label: c.name })) },
     { name: 'supplierId', label: 'Proveedor', type: 'select', options: suppliers.data?.data.map((s) => ({ value: s.id, label: s.name })) },
     { name: 'unit', label: 'Unidad de medida', placeholder: 'UND, KG, CJA…' },
-    { name: 'costPrice', label: 'Costo', type: 'number', step: '0.01' },
-    { name: 'salePrice', label: 'Precio de venta', type: 'number', step: '0.01' },
+    { name: 'costPrice', label: 'Costo neto', type: 'number', step: '1' },
+    { name: 'salePrice', label: 'Precio de venta neto', type: 'number', step: '1', hint: 'Sin IVA' },
     { name: 'minStock', label: 'Stock mínimo', type: 'number' },
     { name: 'maxStock', label: 'Stock máximo', type: 'number' },
     { name: 'description', label: 'Descripción', type: 'textarea' },
+    { name: 'taxExempt', label: 'Exento de IVA', type: 'checkbox' },
     { name: 'isActive', label: 'Activo', type: 'checkbox' },
   ];
   const initialStockFields: FieldDef[] = [
@@ -127,7 +135,7 @@ export default function ProductsPage() {
 
   const openForm = (p: Product | null) => {
     setEditing(p);
-    setValues(p ? { ...p } : { unit: 'UND', costPrice: 0, salePrice: 0, minStock: 0, isActive: true });
+    setValues(p ? { ...p } : { unit: 'UND', costPrice: 0, salePrice: 0, minStock: 0, isActive: true, taxExempt: false });
     setFormOpen(true);
   };
 
@@ -187,15 +195,27 @@ export default function ProductsPage() {
                 </div>
               ),
             },
-            { header: 'Costo', className: 'text-right', cell: (p) => fmtMoney(p.costPrice) },
-            { header: 'Precio', className: 'text-right', cell: (p) => fmtMoney(p.salePrice) },
+            { header: 'Costo neto', className: 'text-right', cell: (p) => fmtMoney(p.costPrice) },
             {
-              header: 'Stock',
+              header: 'Precio neto',
               className: 'text-right',
               cell: (p) => (
-                <Badge tone={p.totalStock === 0 ? 'red' : p.isLowStock ? 'amber' : 'green'}>
-                  {fmtNumber(p.totalStock)} {p.unit}
-                </Badge>
+                <span className="whitespace-nowrap">
+                  {fmtMoney(p.salePrice)}
+                  {p.taxExempt && <span className="ml-1 text-[10px] font-bold text-slate-500">EX</span>}
+                </span>
+              ),
+            },
+            {
+              header: 'Disponible',
+              className: 'text-right',
+              cell: (p) => (
+                <div className="flex flex-col items-end gap-0.5">
+                  <Badge tone={p.availableStock <= 0 ? 'red' : p.isLowStock ? 'amber' : 'green'}>
+                    {fmtNumber(p.availableStock)} {p.unit}
+                  </Badge>
+                  {p.reservedStock > 0 && <span className="text-[11px] text-slate-500">{fmtNumber(p.reservedStock)} reservadas</span>}
+                </div>
               ),
             },
             { header: 'Estado', cell: (p) => <Badge tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Activo' : 'Inactivo'}</Badge> },

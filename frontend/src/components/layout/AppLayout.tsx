@@ -7,7 +7,11 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  Building,
   FolderTree,
+  GitBranch,
+  Landmark,
+  Webhook,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -25,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { ROLE_LABELS } from '@/lib/format';
+import { CompanySwitcher } from '../CompanySwitcher';
 import type { Role } from '@/lib/types';
 
 interface NavItem {
@@ -32,6 +37,8 @@ interface NavItem {
   label: string;
   icon: ReactNode;
   role?: Role;
+  /** Solo administrador de plataforma */
+  superAdmin?: boolean;
 }
 
 const NAV: { title: string; items: NavItem[] }[] = [
@@ -55,6 +62,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: 'Maestros',
     items: [
       { to: '/categories', label: 'Categorías', icon: <FolderTree /> },
+      { to: '/branches', label: 'Sucursales', icon: <GitBranch /> },
       { to: '/warehouses', label: 'Almacenes', icon: <Warehouse /> },
       { to: '/suppliers', label: 'Proveedores', icon: <Truck /> },
       { to: '/customers', label: 'Clientes', icon: <Building2 /> },
@@ -63,11 +71,14 @@ const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Administración',
     items: [
+      { to: '/company', label: 'Mi empresa', icon: <Building />, role: 'ADMIN' },
       { to: '/users', label: 'Usuarios', icon: <Users />, role: 'ADMIN' },
       { to: '/api-keys', label: 'API Keys', icon: <KeyRound />, role: 'ADMIN' },
+      { to: '/webhooks', label: 'Webhooks', icon: <Webhook />, role: 'ADMIN' },
       { to: '/audit', label: 'Auditoría', icon: <ScrollText />, role: 'ADMIN' },
     ],
   },
+  { title: 'Plataforma', items: [{ to: '/companies', label: 'Empresas', icon: <Landmark />, superAdmin: true }] },
 ];
 
 function ThemeToggle() {
@@ -90,7 +101,7 @@ function ThemeToggle() {
 }
 
 export function AppLayout() {
-  const { user, logout, can } = useAuth();
+  const { session, user, logout, can } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const sidebar = (
@@ -103,7 +114,7 @@ export function AppLayout() {
         </div>
       </div>
       {NAV.map((group) => {
-        const items = group.items.filter((i) => !i.role || can(i.role));
+        const items = group.items.filter((i) => (i.superAdmin ? user?.isSuperAdmin : !i.role || can(i.role)));
         if (!items.length) return null;
         return (
           <div key={group.title}>
@@ -152,13 +163,16 @@ export function AppLayout() {
           <button className="rounded-lg p-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Abrir menú">
             <Menu className="size-5" />
           </button>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-2 min-w-0 flex-1 lg:ml-0">
+            <CompanySwitcher />
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <ThemeToggle />
             <NavLink to="/profile" className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-navy-800">
               <UserCircle className="size-7 text-brand-500" />
               <div className="hidden text-left sm:block">
                 <p className="text-sm font-medium leading-tight">{user?.name}</p>
-                <p className="text-xs text-slate-500">{user && ROLE_LABELS[user.role]}</p>
+                <p className="text-xs text-slate-500">{session && (user?.isSuperAdmin ? 'Admin. plataforma' : ROLE_LABELS[session.role])}</p>
               </div>
             </NavLink>
             <button onClick={logout} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800" aria-label="Cerrar sesión" title="Cerrar sesión">

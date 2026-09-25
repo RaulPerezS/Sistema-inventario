@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fmtMoney, fmtNumber, MOVEMENT_LABELS } from '@/lib/format';
 import { useGet } from '@/hooks/useApi';
+import { BranchFilter } from './DashboardPage';
 import { useThemeColors } from '@/lib/theme';
 import { Badge, DataTable, Field, Input, PageHeader, Select } from '@/components/ui';
 
@@ -35,6 +36,7 @@ interface MovSummary {
 interface Sales {
   totalOrders: number;
   totalRevenue: string;
+  totalTax: string;
   byDay: { date: string; orders: number; revenue: string }[];
 }
 
@@ -43,13 +45,14 @@ const monthAgo = () => new Date(Date.now() - 30 * 86_400_000).toISOString().slic
 export default function ReportsPage() {
   const c = useThemeColors();
   const COLORS = c.series;
-  const [groupBy, setGroupBy] = useState<'category' | 'warehouse'>('category');
+  const [groupBy, setGroupBy] = useState<'category' | 'branch' | 'warehouse'>('category');
+  const [branchId, setBranchId] = useState('');
   const [from, setFrom] = useState(monthAgo());
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const range = { from, to };
-  const valuation = useGet<Valuation[]>('/reports/valuation', { groupBy });
+  const range = { from, to, branchId };
+  const valuation = useGet<Valuation[]>('/reports/valuation', { groupBy, branchId });
   const top = useGet<Top[]>('/reports/top-products', { ...range, limit: 10 });
-  const low = useGet<LowStock[]>('/reports/low-stock');
+  const low = useGet<LowStock[]>('/reports/low-stock', { branchId });
   const movements = useGet<MovSummary>('/reports/movements-summary', range);
   const sales = useGet<Sales>('/reports/sales-summary', range);
 
@@ -61,7 +64,8 @@ export default function ReportsPage() {
         title="Reportes"
         description="Análisis del inventario, rotación y ventas"
         actions={
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <BranchFilter value={branchId} onChange={setBranchId} />
             <Field label="Desde">
               <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             </Field>
@@ -76,8 +80,9 @@ export default function ReportsPage() {
         <div className="card p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Valorización del inventario</h2>
-            <Select className="w-40" value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'category' | 'warehouse')} aria-label="Agrupar por">
+            <Select className="w-40" value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'category' | 'branch' | 'warehouse')} aria-label="Agrupar por">
               <option value="category">Por categoría</option>
+              <option value="branch">Por sucursal</option>
               <option value="warehouse">Por almacén</option>
             </Select>
           </div>
@@ -127,7 +132,8 @@ export default function ReportsPage() {
         <div className="card p-5">
           <h2 className="mb-1 font-semibold">Ventas despachadas</h2>
           <p className="mb-4 text-sm text-slate-500">
-            {sales.data?.totalOrders ?? 0} órdenes · <span className="font-medium text-slate-900 dark:text-slate-100">{fmtMoney(sales.data?.totalRevenue)}</span>
+            {sales.data?.totalOrders ?? 0} órdenes · neto <span className="font-medium text-slate-900 dark:text-slate-100">{fmtMoney(sales.data?.totalRevenue)}</span> · IVA débito{' '}
+            {fmtMoney(sales.data?.totalTax)}
           </p>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">

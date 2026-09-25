@@ -45,7 +45,7 @@ const PURCHASE: OrdersConfig = {
   partyResource: '/suppliers',
   partyLabel: 'Proveedor',
   partyRequired: true,
-  priceLabel: 'Costo unitario',
+  priceLabel: 'Costo neto',
   priceField: 'unitCost',
   createRole: 'MANAGER',
   statuses: PURCHASE_STATUS,
@@ -66,15 +66,15 @@ const SALES: OrdersConfig = {
   partyResource: '/customers',
   partyLabel: 'Cliente',
   partyRequired: false,
-  priceLabel: 'Precio unitario',
+  priceLabel: 'Precio neto',
   priceField: 'unitPrice',
   createRole: 'OPERATOR',
   statuses: SALES_STATUS,
   defaultPrice: (p) => p.salePrice,
   actions: [
-    { id: 'confirm', label: 'Confirmar', role: 'OPERATOR', from: ['DRAFT'], confirm: 'Se validará la disponibilidad de stock.' },
-    { id: 'fulfill', label: 'Despachar', role: 'OPERATOR', from: ['CONFIRMED'], confirm: 'Se descontará el stock del almacén.' },
-    { id: 'cancel', label: 'Cancelar', role: 'OPERATOR', from: ['DRAFT', 'CONFIRMED'], variant: 'secondary', confirm: '¿Cancelar la orden?' },
+    { id: 'confirm', label: 'Confirmar', role: 'OPERATOR', from: ['DRAFT'], confirm: 'Se reservará el stock en el almacén: dejará de estar disponible para otras ventas o salidas.' },
+    { id: 'fulfill', label: 'Despachar', role: 'OPERATOR', from: ['CONFIRMED'], confirm: 'Se consumirá la reserva y se descontará el stock del almacén.' },
+    { id: 'cancel', label: 'Cancelar', role: 'OPERATOR', from: ['DRAFT', 'CONFIRMED'], variant: 'secondary', confirm: '¿Cancelar la orden? Si estaba confirmada, se libera el stock reservado.' },
     { id: 'delete', label: 'Eliminar', role: 'MANAGER', from: ['DRAFT'], variant: 'danger', method: 'delete', confirm: '¿Eliminar el borrador?' },
   ],
 };
@@ -142,10 +142,18 @@ function OrderDetail({ cfg, id, onClose }: { cfg: OrdersConfig; id: string; onCl
                 { header: 'Cantidad', className: 'text-right', cell: (i) => i.quantity },
                 ...(cfg.kind === 'purchase' ? [{ header: 'Recibido', className: 'text-right', cell: (i: AnyOrder['items'][number]) => i.receivedQuantity ?? 0 }] : []),
                 { header: cfg.priceLabel, className: 'text-right', cell: (i) => fmtMoney(i[cfg.priceField]) },
-                { header: 'Subtotal', className: 'text-right', cell: (i) => fmtMoney(Number(i[cfg.priceField]) * i.quantity) },
+                { header: 'IVA', className: 'text-right', cell: (i) => (Number(i.taxRate) === 0 ? <Badge tone="gray">Exento</Badge> : `${Number(i.taxRate)}%`) },
+                { header: 'Neto', className: 'text-right', cell: (i) => fmtMoney(Number(i[cfg.priceField]) * i.quantity) },
               ]}
             />
-            <div className="flex justify-end border-t border-slate-200 px-4 py-3 font-semibold dark:border-navy-800">Total: {fmtMoney(order.total)}</div>
+            <dl className="ml-auto grid w-64 grid-cols-2 gap-y-1 border-t border-slate-200 px-4 py-3 text-sm dark:border-navy-800">
+              <dt className="text-slate-500">Neto</dt>
+              <dd className="text-right tabular-nums">{fmtMoney(order.subtotal)}</dd>
+              <dt className="text-slate-500">IVA</dt>
+              <dd className="text-right tabular-nums">{fmtMoney(order.tax)}</dd>
+              <dt className="font-semibold">Total</dt>
+              <dd className="text-right font-semibold tabular-nums">{fmtMoney(order.total)}</dd>
+            </dl>
           </div>
         </div>
       )}
@@ -164,6 +172,7 @@ function OrderDetail({ cfg, id, onClose }: { cfg: OrdersConfig; id: string; onCl
 }
 
 function OrderForm({ cfg, onClose, onCreated }: { cfg: OrdersConfig; onClose: () => void; onCreated: (id: string) => void }) {
+  const { session } = useAuth();
   const [partyId, setPartyId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
@@ -236,7 +245,13 @@ function OrderForm({ cfg, onClose, onCreated }: { cfg: OrdersConfig; onClose: ()
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>
         </div>
-        <ItemsEditor items={items} onChange={setItems} priceLabel={cfg.priceLabel} defaultPrice={cfg.defaultPrice} />
+        <ItemsEditor
+          items={items}
+          onChange={setItems}
+          priceLabel={cfg.priceLabel}
+          defaultPrice={cfg.defaultPrice}
+          taxRate={Number(session?.company?.taxRate ?? 19)}
+        />
       </form>
     </Modal>
   );
@@ -288,7 +303,7 @@ function OrdersPage({ cfg }: { cfg: OrdersConfig }) {
             { header: cfg.partyLabel, cell: (o) => partyOf(o)?.name ?? 'Cliente mostrador' },
             { header: 'Almacén', cell: (o) => o.warehouse.code },
             { header: 'Ítems', className: 'text-right', cell: (o) => o.items.length },
-            { header: 'Total', className: 'text-right', cell: (o) => <span className="font-medium">{fmtMoney(o.total)}</span> },
+            { header: 'Total c/IVA', className: 'text-right', cell: (o) => <span className="font-medium">{fmtMoney(o.total)}</span> },
             { header: 'Estado', cell: (o) => <Badge tone={cfg.statuses[o.status]?.tone as Tone}>{cfg.statuses[o.status]?.label}</Badge> },
           ]}
         />

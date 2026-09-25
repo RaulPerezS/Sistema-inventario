@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Role } from '@/lib/types';
+import { fmtRut, isValidRut } from '@/lib/format';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useApiMutation, useList } from '@/hooks/useApi';
 import { Button, Checkbox, ConfirmDialog, DataTable, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, Textarea, type Column } from './ui';
@@ -10,7 +11,7 @@ import { Button, Checkbox, ConfirmDialog, DataTable, Field, Input, Modal, PageHe
 export interface FieldDef {
   name: string;
   label: string;
-  type?: 'text' | 'email' | 'number' | 'password' | 'textarea' | 'select' | 'checkbox' | 'date';
+  type?: 'text' | 'email' | 'number' | 'password' | 'textarea' | 'select' | 'checkbox' | 'date' | 'multiselect' | 'rut';
   options?: { value: string; label: string }[];
   required?: boolean;
   placeholder?: string;
@@ -31,6 +32,36 @@ export function ResourceForm({ fields, values, onChange, isEdit }: { fields: Fie
         .filter((f) => !(f.createOnly && isEdit))
         .map((f) => {
           const value = values[f.name];
+          if (f.type === 'multiselect') {
+            const selected = (value as string[] | undefined) ?? [];
+            return (
+              <Field key={f.name} label={f.label} hint={f.hint} className="sm:col-span-2">
+                <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-slate-200 p-3 dark:border-navy-800">
+                  {f.options?.length ? (
+                    f.options.map((o) => (
+                      <Checkbox
+                        key={o.value}
+                        label={o.label}
+                        checked={selected.includes(o.value)}
+                        onChange={(e) => set(f.name, e.target.checked ? [...selected, o.value] : selected.filter((v) => v !== o.value))}
+                      />
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-500">Sin opciones</span>
+                  )}
+                </div>
+              </Field>
+            );
+          }
+          if (f.type === 'rut') {
+            const text = (value ?? '') as string;
+            const invalid = text.trim() !== '' && !isValidRut(text);
+            return (
+              <Field key={f.name} label={f.label + (f.required ? ' *' : '')} hint={f.hint ?? 'Ej.: 76.123.456-0'} error={invalid ? 'RUT inválido' : undefined}>
+                <Input id={f.name} required={f.required} value={text} placeholder="12.345.678-9" onChange={(e) => set(f.name, e.target.value)} onBlur={() => !invalid && text && set(f.name, fmtRut(text))} />
+              </Field>
+            );
+          }
           if (f.type === 'checkbox') {
             return (
               <div key={f.name} className="sm:col-span-2">
@@ -68,7 +99,8 @@ export function toPayload(fields: FieldDef[], values: Values, isEdit: boolean): 
   for (const f of fields) {
     if (f.createOnly && isEdit) continue;
     let v = values[f.name];
-    if (v === '' || v === undefined) v = f.type === 'password' ? undefined : null;
+    if (f.type === 'multiselect') v = (v as string[] | undefined) ?? [];
+    else if (v === '' || v === undefined) v = f.type === 'password' ? undefined : null;
     else if (f.type === 'number') v = Number(v);
     if (v === null && f.required) continue;
     if (v !== undefined) out[f.name] = v;
@@ -93,6 +125,9 @@ interface CrudPageProps<T extends { id: string }> {
   /** Transformación adicional del payload antes de enviarlo. */
   transform?: (payload: Values, isEdit: boolean) => Values;
   deleteLabel?: string;
+  /** false oculta la acción de eliminar. */
+  canDelete?: boolean;
+  onSaved?: () => void;
 }
 
 export function CrudPage<T extends { id: string }>(p: CrudPageProps<T>) {
@@ -109,7 +144,14 @@ export function CrudPage<T extends { id: string }>(p: CrudPageProps<T>) {
 
   const save = useApiMutation(
     async (payload: Values) => (editing ? api.patch(`${p.resource}/${editing.id}`, payload) : api.post(p.resource, payload)),
-    { success: `${p.entityName} guardado`, invalidate: [p.resource], onSuccess: () => setFormOpen(false) },
+    {
+      success: `${p.entityName} guardado`,
+      invalidate: [p.resource],
+      onSuccess: () => {
+        setFormOpen(false);
+        p.onSaved?.();
+      },
+    },
   );
   const remove = useApiMutation(async (row: T) => api.delete(`${p.resource}/${row.id}`), {
     success: `${p.entityName} eliminado`,
@@ -118,7 +160,7 @@ export function CrudPage<T extends { id: string }>(p: CrudPageProps<T>) {
   });
 
   const canWrite = can(p.writeRole ?? 'MANAGER');
-  const canDelete = can(p.deleteRole ?? p.writeRole ?? 'MANAGER');
+  const canDelete = p.canDelete !== false && can(p.deleteRole ?? p.writeRole ?? 'MANAGER');
 
   const openForm = (row: T | null) => {
     setEditing(row);

@@ -1,6 +1,6 @@
 # 📦 Sistema de Inventario
 
-Sistema web completo para la gestión de inventario multi-almacén, con **API REST documentada** lista para ser consumida por otros sistemas (ERP, e-commerce, POS, apps móviles) y un **panel web** moderno.
+Plataforma web **multiempresa y multisucursal** para la gestión de inventario, adaptada a Chile (pesos, RUT e IVA), con **API REST documentada** lista para ser consumida por otros sistemas (ERP, e-commerce, POS, apps móviles), **webhooks** y un **panel web** moderno.
 
 | Capa | Tecnología |
 |---|---|
@@ -15,20 +15,36 @@ Sistema web completo para la gestión de inventario multi-almacén, con **API RE
 
 ## ✨ Funcionalidades
 
+### Multiempresa y multisucursal
+- **Empresas aisladas** (multi-tenant): cada empresa tiene su RUT, giro, tasa de IVA, catálogo, clientes, proveedores, stock, órdenes, usuarios, API keys, webhooks y auditoría. Ningún dato es visible ni modificable desde otra empresa (cubierto por pruebas).
+- **Sucursales** por empresa; cada **almacén pertenece a una sucursal**. El catálogo se comparte en la empresa y el stock se lleva por almacén.
+- **Un usuario, varias empresas**: cada persona puede tener acceso a varias empresas con un **rol distinto en cada una**, y cambiar de empresa desde el panel (o con `POST /auth/switch-company`) sin volver a iniciar sesión.
+- **Restricción por sucursal**: usuarios y API keys pueden limitarse a ciertas sucursales; solo ven y operan sus almacenes, órdenes, movimientos y reportes.
+- **Administrador de plataforma** (p. ej. HGV): crea y administra empresas, con su primera sucursal y su administrador inicial.
+- Correlativos (`OC-000001`, `OV-000001`), SKU, códigos de almacén y RUT **únicos por empresa**.
+
+### Chile
+- Montos en **pesos chilenos** (sin decimales), formato `es-CL`.
+- **RUT** validado con dígito verificador y normalizado (`12.345.678-5` → `12345678-5`).
+- **IVA 19 %** (configurable por empresa) con **productos exentos**; las órdenes guardan neto, IVA y total, y el IVA se calcula por tasa y se redondea una vez.
+
+### Inventario
 - **Catálogo**: productos (SKU, código de barras, costo, precio, stock mínimo/máximo), categorías jerárquicas, proveedores, clientes y almacenes.
 - **Inventario multi-almacén**: entradas, salidas, **transferencias** entre almacenes y **ajustes por conteo físico**.
 - **Kardex** completo por producto (cada movimiento guarda el saldo resultante, usuario y referencia).
 - **Costo promedio ponderado** recalculado automáticamente en cada entrada con costo.
 - **Órdenes de compra**: borrador → emitida → recepción parcial/total (genera stock).
-- **Órdenes de venta**: borrador → confirmada (valida stock) → despachada (descuenta stock).
-- **Reportes**: dashboard de KPIs, stock bajo con **sugerencia de reposición**, valorización por categoría/almacén, productos con mayor salida, ventas por día, resumen de movimientos.
+- **Órdenes de venta**: borrador → confirmada (**reserva el stock**) → despachada (consume la reserva). Cancelar libera la reserva.
+- **Stock físico, reservado y disponible**: las salidas manuales y transferencias solo pueden usar lo disponible, así dos ventas nunca prometen las mismas unidades.
+- **Webhooks**: notificaciones firmadas (HMAC-SHA256) a otros sistemas cuando hay movimientos de stock, stock bajo o cambios en productos y órdenes, con reintentos automáticos e historial de envíos.
+- **Reportes** (filtrables por sucursal): dashboard de KPIs, stock bajo con **sugerencia de reposición**, valorización por categoría/sucursal/almacén, productos con mayor salida, ventas netas e IVA débito por día, resumen de movimientos.
 - **Exportación CSV** (productos y movimientos) e **importación masiva** de productos (upsert por SKU).
 - **Búsqueda por código de barras / SKU** (`/products/lookup`) para lectores.
 - **Usuarios y roles**, **API keys** para integraciones y **bitácora de auditoría** de todas las operaciones.
 
 ### Garantías de consistencia
 - Todas las operaciones de stock se ejecutan en **transacciones**; si un ítem falla, no se aplica ninguno.
-- Las salidas usan un `UPDATE ... WHERE quantity >= n` atómico: **el stock nunca queda negativo**, incluso con peticiones concurrentes (cubierto por pruebas).
+- Las salidas usan un `UPDATE ... WHERE quantity - reserved >= n` atómico: **el stock nunca queda negativo ni se vende lo reservado**, incluso con peticiones concurrentes (cubierto por pruebas). Una restricción `CHECK` en la base garantiza `0 ≤ reservado ≤ físico`.
 - Las transiciones de estado de órdenes son atómicas (no se puede despachar dos veces).
 - Numeración correlativa sin huecos por concurrencia (`OC-000001`, `OV-000001`).
 
@@ -73,27 +89,31 @@ npm install
 npm run dev                   # http://localhost:5173 (proxy /api → :4000)
 ```
 
-### Usuarios de demostración
+### Datos de demostración
 
-| Rol | Correo | Contraseña |
-|---|---|---|
-| Administrador | admin@inventario.local | Admin123! |
-| Gerente | gerente@inventario.local | Gerente123! |
-| Operador | operador@inventario.local | Operador123! |
-| Consulta | consulta@inventario.local | Consulta123! |
+El seed crea dos empresas: **Comercial Los Andes SpA** (sucursales Santiago Centro y Antofagasta) y **Distribuidora Del Sur Limitada** (sucursal Concepción).
+
+| Usuario | Correo | Contraseña | Acceso |
+|---|---|---|---|
+| Administrador de plataforma | admin@inventario.local | Admin123! | Administra todas las empresas |
+| Gerente | gerente@inventario.local | Gerente123! | Gerente en Los Andes |
+| Operador | operador@inventario.local | Operador123! | Operador en Los Andes, **solo sucursal Santiago** |
+| Consulta | consulta@inventario.local | Consulta123! | Consulta en **ambas empresas** (puede cambiar entre ellas) |
+| Admin Del Sur | admin@delsur.cl | DelSur123! | Administradora de Del Sur |
 
 ---
 
 ## 🔐 Roles y permisos
 
-Los roles son jerárquicos: cada uno incluye los permisos de los anteriores.
+Los roles se asignan **por empresa** y son jerárquicos: cada uno incluye los permisos de los anteriores. Además, cualquier rol puede restringirse a ciertas sucursales.
 
 | Rol | Puede |
 |---|---|
 | `VIEWER` | Consultar todo: catálogo, stock, movimientos, órdenes y reportes |
 | `OPERATOR` | + registrar entradas, salidas y transferencias; crear/confirmar/despachar ventas; recibir compras |
 | `MANAGER` | + gestionar catálogo y maestros, ajustes de inventario, órdenes de compra |
-| `ADMIN` | + usuarios, API keys, auditoría y eliminación de almacenes |
+| `ADMIN` | + datos de la empresa, sucursales, usuarios, API keys, webhooks, auditoría y eliminación de almacenes |
+| Administrador de plataforma | Gestiona empresas (`/companies`) y puede operar en cualquiera de ellas |
 
 ---
 
@@ -112,7 +132,13 @@ Los roles son jerárquicos: cada uno incluye los permisos de los anteriores.
 curl -X POST http://localhost:4000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@inventario.local","password":"Admin123!"}'
-# → { accessToken, refreshToken, user, ... }
+# → { accessToken, refreshToken, user, company, role, branches, companies, ... }
+# Opcional: "companyId" en el login para entrar directo a una empresa
+
+# Cambiar de empresa (emite tokens nuevos)
+curl -X POST http://localhost:4000/api/v1/auth/switch-company \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"companyId":"<uuid>"}'
 
 # Usar el token
 curl http://localhost:4000/api/v1/products?search=laptop \
@@ -125,7 +151,7 @@ curl -X POST http://localhost:4000/api/v1/auth/refresh \
 
 ### 2. Sistemas externos (API key)
 
-Un administrador crea la clave en **Administración → API Keys** (o `POST /api-keys`), elige sus permisos (hasta `MANAGER`) y opcionalmente una fecha de expiración.
+Un administrador crea la clave en **Administración → API Keys** (o `POST /api-keys`), elige sus permisos (hasta `MANAGER`), opcionalmente las sucursales permitidas y una fecha de expiración. La clave pertenece a la empresa en que se creó: todas sus operaciones quedan dentro de esa empresa.
 
 ```bash
 # Consultar stock desde un e-commerce
@@ -138,18 +164,33 @@ curl -X POST http://localhost:4000/api/v1/inventory/exits \
   -d '{"warehouseId":"<uuid>","reference":"TICKET-8812","items":[{"productId":"<uuid>","quantity":2}]}'
 ```
 
+### 3. Webhooks
+
+En **Administración → Webhooks** (o `POST /webhooks`) se registra una URL y los eventos a recibir: `inventory.movements.created`, `inventory.low_stock`, `product.created|updated|deleted`, `purchase_order.created|status_changed`, `sales_order.created|status_changed` (o `*`).
+
+Cada envío es un `POST` JSON `{ id, event, companyId, createdAt, data }` con las cabeceras `X-Webhook-Event`, `X-Webhook-Id`, `X-Webhook-Timestamp` y `X-Webhook-Signature`. Para verificar la firma:
+
+```js
+const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(`${timestamp}.${rawBody}`).digest('hex');
+// compare expected con la cabecera X-Webhook-Signature (use timingSafeEqual)
+```
+
+Responda con un código 2xx para confirmar la recepción; si no, se reintenta con espera exponencial (30 s, 1, 2, 4 y 8 min; hasta 6 intentos). Los envíos se guardan en una cola en PostgreSQL (`FOR UPDATE SKIP LOCKED`), por lo que sobreviven a reinicios y funcionan con varias instancias de la API.
+
 ### Endpoints principales
 
 | Recurso | Endpoints |
 |---|---|
-| Autenticación | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `POST /auth/logout-all` · `GET /auth/me` · `PATCH /auth/me/password` |
+| Autenticación | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/switch-company` · `POST /auth/logout` · `POST /auth/logout-all` · `GET /auth/me` · `PATCH /auth/me/password` |
+| Empresa y sucursales | `GET/PATCH /company` · `GET/POST /branches` · `GET/PATCH/DELETE /branches/:id` |
 | Productos | `GET/POST /products` · `GET/PATCH/DELETE /products/:id` · `GET /products/:id/movements` · `GET /products/lookup?code=` · `GET /products/export` · `POST /products/import` |
 | Inventario | `GET /inventory/stock` · `GET /inventory/movements` · `GET /inventory/movements/export` · `POST /inventory/entries` · `POST /inventory/exits` · `POST /inventory/transfers` · `POST /inventory/adjustments` |
 | Órdenes de compra | `GET/POST /purchase-orders` · `GET/PUT/DELETE /purchase-orders/:id` · `POST /:id/order` · `POST /:id/receive` · `POST /:id/cancel` |
 | Órdenes de venta | `GET/POST /sales-orders` · `GET/PUT/DELETE /sales-orders/:id` · `POST /:id/confirm` · `POST /:id/fulfill` · `POST /:id/cancel` |
 | Maestros | `/categories` · `/warehouses` · `/suppliers` · `/customers` (CRUD completo) |
 | Reportes | `/reports/dashboard` · `/reports/low-stock` · `/reports/valuation` · `/reports/movements-summary` · `/reports/top-products` · `/reports/sales-summary` |
-| Administración | `/users` · `/api-keys` · `/audit-logs` |
+| Administración | `/users` · `/api-keys` · `/webhooks` · `/audit-logs` |
+| Plataforma | `GET/POST /companies` · `GET/PATCH /companies/:id` |
 | Sistema | `GET /health` |
 
 La lista completa con esquemas, ejemplos y la opción de probar cada endpoint está en **Swagger UI** (`/api/docs`).
@@ -204,14 +245,14 @@ Cada endpoint se declara **una sola vez** con `ApiRouter`: el mismo esquema Zod 
 ```bash
 cd backend
 createdb inventario_test       # base de datos exclusiva para pruebas (ver .env.test)
-npm test                       # 25 pruebas de integración
+npm test                       # 46 pruebas de integración
 npm run lint && npm run typecheck
 
 cd ../frontend
 npm run lint && npm run build
 ```
 
-Las pruebas cubren: autenticación y rotación de tokens, permisos por rol, API keys, CRUD, costo promedio, transferencias, ajustes, **salidas concurrentes**, ciclos completos de órdenes de compra y venta, reportes, CSV y OpenAPI.
+Las pruebas cubren: **aislamiento entre empresas**, **restricción por sucursal**, cambio de empresa, usuarios compartidos entre empresas, autenticación y rotación de tokens, permisos por rol, API keys, RUT, IVA y exentos, **reservas de stock**, **salidas concurrentes**, webhooks firmados con reintentos, costo promedio, transferencias, ajustes, ciclos completos de órdenes de compra y venta, reportes, CSV y OpenAPI.
 
 ---
 
@@ -225,6 +266,10 @@ Las pruebas cubren: autenticación y rotación de tokens, permisos por rol, API 
 | `JWT_REFRESH_EXPIRES_DAYS` | Vigencia del refresh token | `7` |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma | `http://localhost:5173` |
 | `RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_MAX` | Peticiones por ventana (general / login) | `1000` / `20` |
+| `TAX_RATE` | IVA por defecto para empresas nuevas (%) | `19` |
+| `MONEY_DECIMALS` | Decimales de los montos (0 para CLP) | `0` |
+| `CURRENCY` | Moneda | `CLP` |
+| `WEBHOOKS_ENABLED` | Activa el worker de envío de webhooks | `true` |
 | `LOG_LEVEL` | Nivel de logs (pino) | `info` |
 
 ## 📌 Notas de producción
@@ -233,6 +278,7 @@ Las pruebas cubren: autenticación y rotación de tokens, permisos por rol, API 
 - Use secretos JWT largos y aleatorios, y una contraseña de base de datos robusta.
 - Las migraciones se aplican automáticamente al iniciar el contenedor (`prisma migrate deploy`).
 - Los productos se eliminan de forma lógica (conservan su historial); su SKU queda reservado y puede reactivarse vía importación.
+- La migración a multiempresa conserva los datos existentes: se asignan a una "Empresa principal" con una sucursal "Casa Matriz", los roles de cada usuario pasan a su membresía y los administradores existentes quedan como administradores de plataforma. Edite el RUT de esa empresa después de migrar.
 
 ## Licencia
 

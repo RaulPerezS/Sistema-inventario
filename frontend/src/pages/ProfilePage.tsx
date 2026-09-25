@@ -6,7 +6,7 @@ import { useApiMutation } from '@/hooks/useApi';
 import { Button, Field, Input, PageHeader } from '@/components/ui';
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, session, logout } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -33,7 +33,17 @@ export default function ProfilePage() {
             <span className="text-slate-500">Correo:</span> {user?.email}
           </p>
           <p>
-            <span className="text-slate-500">Rol:</span> {user && ROLE_LABELS[user.role]}
+            <span className="text-slate-500">Empresa activa:</span> {session?.company?.name ?? '—'}
+          </p>
+          <p>
+            <span className="text-slate-500">Rol en la empresa:</span> {session && ROLE_LABELS[session.role]}
+            {user?.isSuperAdmin && ' · Administrador de plataforma'}
+          </p>
+          <p>
+            <span className="text-slate-500">Sucursales:</span> {session?.branchIds ? session.branches.map((b) => b.name).join(', ') : 'Todas'}
+          </p>
+          <p>
+            <span className="text-slate-500">Empresas con acceso:</span> {session?.companies.length ?? 0}
           </p>
           <p>
             <span className="text-slate-500">Último acceso:</span> {fmtDateTime(user?.lastLoginAt)}

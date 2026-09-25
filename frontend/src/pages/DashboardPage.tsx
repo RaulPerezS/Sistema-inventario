@@ -4,8 +4,10 @@ import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, X
 import { useGet } from '@/hooks/useApi';
 import { fmtDateTime, fmtMoney, fmtNumber, MOVEMENT_LABELS } from '@/lib/format';
 import type { Movement } from '@/lib/types';
+import { useState } from 'react';
+import { useAuth } from '@/lib/auth';
 import { useThemeColors } from '@/lib/theme';
-import { Badge, DataTable, PageHeader, Spinner, StatCard } from '@/components/ui';
+import { Badge, DataTable, PageHeader, Select, Spinner, StatCard } from '@/components/ui';
 
 interface Dashboard {
   totals: {
@@ -14,6 +16,8 @@ interface Dashboard {
     suppliers: number;
     customers: number;
     units: number;
+    reservedUnits: number;
+    branches: number;
     inventoryValue: string;
     inventoryRetailValue: string;
     lowStock: number;
@@ -38,9 +42,27 @@ export function MovementBadge({ m }: { m: Pick<Movement, 'type' | 'quantity'> })
   return <Badge tone={m.quantity > 0 ? 'green' : 'red'}>{MOVEMENT_LABELS[m.type]}</Badge>;
 }
 
+/** Selector de sucursal (solo si el usuario ve más de una). */
+export function BranchFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { session } = useAuth();
+  if (!session || session.branches.length < 2) return null;
+  return (
+    <Select className="w-56" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Sucursal">
+      <option value="">Todas las sucursales</option>
+      {session.branches.map((b) => (
+        <option key={b.id} value={b.id}>
+          {b.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 export default function DashboardPage() {
-  const { data, isLoading } = useGet<Dashboard>('/reports/dashboard');
-  const lowStock = useGet<LowStock[]>('/reports/low-stock');
+  const { session } = useAuth();
+  const [branchId, setBranchId] = useState('');
+  const { data, isLoading } = useGet<Dashboard>('/reports/dashboard', { branchId });
+  const lowStock = useGet<LowStock[]>('/reports/low-stock', { branchId });
   const c = useThemeColors();
 
   if (isLoading || !data) return <Spinner className="mx-auto mt-20 size-8" />;
@@ -49,10 +71,14 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Resumen general del inventario" />
+      <PageHeader
+        title="Dashboard"
+        description={`Resumen de ${session?.company?.tradeName ?? session?.company?.name ?? 'la empresa'}`}
+        actions={<BranchFilter value={branchId} onChange={setBranchId} />}
+      />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard hero label="Valor del inventario (costo)" value={fmtMoney(t.inventoryValue)} hint={`Margen potencial ${fmtMoney(margin)}`} icon={<DollarSign className="size-5" />} />
-        <StatCard label="Productos activos" value={fmtNumber(t.products)} hint={`${fmtNumber(t.units)} unidades en ${t.warehouses} almacenes`} icon={<Package className="size-5" />} />
+        <StatCard label="Productos activos" value={fmtNumber(t.products)} hint={`${fmtNumber(t.units)} unidades · ${fmtNumber(t.reservedUnits)} reservadas · ${t.branches} sucursal(es)`} icon={<Package className="size-5" />} />
         <StatCard label="Stock bajo" value={fmtNumber(t.lowStock)} hint="En o por debajo del mínimo" icon={<AlertTriangle className="size-5" />} tone="amber" />
         <StatCard label="Sin stock" value={fmtNumber(t.outOfStock)} icon={<PackageX className="size-5" />} tone="red" />
       </div>

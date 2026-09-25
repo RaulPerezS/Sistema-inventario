@@ -93,7 +93,10 @@ export const usersRouter = new ApiRouter('/users', 'Usuarios')
     }
     const current = await findMembership(req, params.id);
     await assertBranches(companyId, body.branchIds);
-    const { name, password, ...membership } = body;
+    const { password, ...membership } = body;
+    // Un nombre idéntico al actual no cuenta como cambio de datos personales
+    const name = body.name !== undefined && body.name !== current.user.name ? body.name : undefined;
+    delete (membership as { name?: string }).name;
     if (name !== undefined || password) await assertOwnsIdentity(req, params.id);
 
     await prisma.$transaction(async (tx) => {

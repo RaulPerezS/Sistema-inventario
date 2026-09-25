@@ -21,6 +21,10 @@ const SalesOrdersPage = lazy(() => import('@/pages/OrdersPage').then((m) => ({ d
 const UsersPage = lazy(() => import('@/pages/AdminPages').then((m) => ({ default: m.UsersPage })));
 const ApiKeysPage = lazy(() => import('@/pages/AdminPages').then((m) => ({ default: m.ApiKeysPage })));
 const AuditPage = lazy(() => import('@/pages/AdminPages').then((m) => ({ default: m.AuditPage })));
+const BranchesPage = lazy(() => import('@/pages/MasterPages').then((m) => ({ default: m.BranchesPage })));
+const WebhooksPage = lazy(() => import('@/pages/WebhooksPage'));
+const CompanySettingsPage = lazy(() => import('@/pages/CompanyPages').then((m) => ({ default: m.CompanySettingsPage })));
+const CompaniesPage = lazy(() => import('@/pages/CompanyPages').then((m) => ({ default: m.CompaniesPage })));
 
 const FullSpinner = () => (
   <div className="flex min-h-[50vh] items-center justify-center">
@@ -28,11 +32,16 @@ const FullSpinner = () => (
   </div>
 );
 
-function Protected({ children, role }: { children: ReactNode; role?: Role }) {
-  const { user, loading, can } = useAuth();
+function Protected({ children, role, superAdmin }: { children: ReactNode; role?: Role; superAdmin?: boolean }) {
+  const { user, session, loading, can } = useAuth();
   if (loading) return <FullSpinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (role && !can(role)) return <EmptyState title="Acceso restringido" description="No tiene permisos para ver esta sección." />;
+  if (superAdmin ? !user.isSuperAdmin : role && !can(role)) {
+    return <EmptyState title="Acceso restringido" description="No tiene permisos para ver esta sección." />;
+  }
+  if (!superAdmin && !session?.company) {
+    return <EmptyState title="Sin empresa seleccionada" description="No hay empresas activas disponibles para su usuario." />;
+  }
   return <>{children}</>;
 }
 
@@ -64,6 +73,10 @@ export default function App() {
             <Route path="users" element={<Protected role="ADMIN"><UsersPage /></Protected>} />
             <Route path="api-keys" element={<Protected role="ADMIN"><ApiKeysPage /></Protected>} />
             <Route path="audit" element={<Protected role="ADMIN"><AuditPage /></Protected>} />
+            <Route path="branches" element={<BranchesPage />} />
+            <Route path="webhooks" element={<Protected role="ADMIN"><WebhooksPage /></Protected>} />
+            <Route path="company" element={<Protected role="ADMIN"><CompanySettingsPage /></Protected>} />
+            <Route path="companies" element={<Protected superAdmin><CompaniesPage /></Protected>} />
             <Route path="*" element={<EmptyState title="Página no encontrada" />} />
           </Route>
         </Routes>

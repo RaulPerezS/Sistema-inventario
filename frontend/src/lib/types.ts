@@ -5,16 +5,69 @@ export interface Paginated<T> {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
-export interface User {
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  isSuperAdmin: boolean;
+  isActive: boolean;
+  lastLoginAt: string | null;
+}
+
+export interface CompanyRef {
+  id: string;
+  name: string;
+  tradeName: string | null;
+  rut: string;
+}
+
+/** Perfil de la sesión: usuario + empresa activa + permisos en ella. */
+export interface Session {
+  user: SessionUser;
+  company: (CompanyRef & { giro: string | null; taxRate: string }) | null;
+  role: Role;
+  /** null = todas las sucursales */
+  branchIds: string[] | null;
+  branches: { id: string; code: string; name: string }[];
+  companies: (CompanyRef & { role: Role })[];
+}
+
+/** Usuario visto desde la empresa activa. */
+export interface CompanyUser {
   id: string;
   email: string;
   name: string;
   role: Role;
+  branchIds: string[];
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
-  updatedAt: string;
 }
+
+export interface Company extends CompanyRef {
+  giro: string | null;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  taxRate: string;
+  isActive: boolean;
+  createdAt: string;
+  _count?: { branches: number; memberships: number; warehouses: number };
+}
+
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  isActive: boolean;
+  _count: { warehouses: number };
+}
+
+type BranchRef = { id: string; code: string; name: string };
 
 export interface Ref {
   id: string;
@@ -42,6 +95,8 @@ export interface Warehouse extends Ref {
   code: string;
   address: string | null;
   isActive: boolean;
+  branchId: string;
+  branch: BranchRef;
 }
 
 export interface Product {
@@ -59,10 +114,13 @@ export interface Product {
   salePrice: string;
   minStock: number;
   maxStock: number | null;
+  taxExempt: boolean;
   isActive: boolean;
   totalStock: number;
+  reservedStock: number;
+  availableStock: number;
   isLowStock: boolean;
-  stocks?: { quantity: number; warehouse: { id: string; code: string; name: string } }[];
+  stocks?: { quantity: number; reserved: number; warehouse: { id: string; code: string; name: string; branch: BranchRef } }[];
 }
 
 export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'PURCHASE' | 'SALE';
@@ -85,9 +143,11 @@ export interface StockLevel {
   productId: string;
   warehouseId: string;
   quantity: number;
+  reserved: number;
+  available: number;
   updatedAt: string;
   product: { id: string; sku: string; name: string; unit: string; minStock: number; costPrice: string };
-  warehouse: { id: string; code: string; name: string };
+  warehouse: { id: string; code: string; name: string; branch: BranchRef };
 }
 
 export interface OrderItem {
@@ -97,6 +157,7 @@ export interface OrderItem {
   receivedQuantity?: number;
   unitCost?: string;
   unitPrice?: string;
+  taxRate: string;
   product: { id: string; sku: string; name: string; unit: string };
 }
 
@@ -109,6 +170,8 @@ export interface PurchaseOrder {
   status: PurchaseStatus;
   expectedDate: string | null;
   notes: string | null;
+  subtotal: string;
+  tax: string;
   total: string;
   supplier: Ref;
   warehouse: { id: string; code: string; name: string };
@@ -122,6 +185,8 @@ export interface SalesOrder {
   number: string;
   status: SalesStatus;
   notes: string | null;
+  subtotal: string;
+  tax: string;
   total: string;
   customer: Ref | null;
   warehouse: { id: string; code: string; name: string };
@@ -135,6 +200,7 @@ export interface ApiKey {
   name: string;
   prefix: string;
   role: Role;
+  branchIds: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -152,4 +218,27 @@ export interface AuditLog {
   createdAt: string;
   user: { id: string; name: string; email: string } | null;
   apiKey: Ref | null;
+}
+
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  createdAt: string;
+  stats: { pending: number; success: number; failed: number };
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  attempts: number;
+  responseStatus: number | null;
+  error: string | null;
+  payload: unknown;
+  nextAttemptAt: string;
+  deliveredAt: string | null;
+  createdAt: string;
 }

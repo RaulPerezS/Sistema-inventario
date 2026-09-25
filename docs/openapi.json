@@ -540,9 +540,8 @@
           },
           "taxId": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 30,
-            "description": "Identificación fiscal (RUC/NIT/RFC...)"
+            "description": "RUT chileno. Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
+            "example": "76.123.456-0"
           },
           "email": {
             "anyOf": [
@@ -656,9 +655,8 @@
           },
           "taxId": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 30,
-            "description": "Identificación fiscal (RUC/NIT/RFC...)"
+            "description": "RUT chileno. Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
+            "example": "76.123.456-0"
           },
           "email": {
             "anyOf": [
@@ -783,7 +781,16 @@
             "format": "uuid"
           },
           "quantity": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Existencia física"
+          },
+          "reserved": {
+            "type": "integer",
+            "description": "Reservado por órdenes de venta confirmadas"
+          },
+          "available": {
+            "type": "integer",
+            "description": "Disponible = físico − reservado"
           },
           "updatedAt": {
             "type": "string",
@@ -844,6 +851,8 @@
           "productId",
           "warehouseId",
           "quantity",
+          "reserved",
+          "available",
           "updatedAt",
           "product",
           "warehouse"
@@ -1277,12 +1286,24 @@
             "type": "integer",
             "nullable": true
           },
+          "taxExempt": {
+            "type": "boolean",
+            "description": "Producto exento de IVA"
+          },
           "isActive": {
             "type": "boolean"
           },
           "totalStock": {
             "type": "integer",
-            "description": "Suma de existencias en todos los almacenes"
+            "description": "Suma de existencias físicas en todos los almacenes"
+          },
+          "reservedStock": {
+            "type": "integer",
+            "description": "Unidades reservadas por ventas confirmadas"
+          },
+          "availableStock": {
+            "type": "integer",
+            "description": "Disponible para vender = físico − reservado"
           },
           "isLowStock": {
             "type": "boolean"
@@ -1311,8 +1332,11 @@
           "salePrice",
           "minStock",
           "maxStock",
+          "taxExempt",
           "isActive",
           "totalStock",
+          "reservedStock",
+          "availableStock",
           "isLowStock",
           "createdAt",
           "updatedAt"
@@ -1332,6 +1356,9 @@
                   "type": "object",
                   "properties": {
                     "quantity": {
+                      "type": "number"
+                    },
+                    "reserved": {
                       "type": "number"
                     },
                     "warehouse": {
@@ -1356,6 +1383,7 @@
                   },
                   "required": [
                     "quantity",
+                    "reserved",
                     "warehouse"
                   ]
                 }
@@ -1416,11 +1444,18 @@
                 },
                 "costPrice": {
                   "type": "number",
+                  "description": "Costo neto (sin IVA)",
                   "example": 19.99
                 },
                 "salePrice": {
                   "type": "number",
+                  "description": "Precio de venta neto (sin IVA)",
                   "example": 19.99
+                },
+                "taxExempt": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Exento de IVA"
                 },
                 "minStock": {
                   "type": "integer",
@@ -1496,11 +1531,18 @@
           },
           "costPrice": {
             "type": "number",
+            "description": "Costo neto (sin IVA)",
             "example": 19.99
           },
           "salePrice": {
             "type": "number",
+            "description": "Precio de venta neto (sin IVA)",
             "example": 19.99
+          },
+          "taxExempt": {
+            "type": "boolean",
+            "default": false,
+            "description": "Exento de IVA"
           },
           "minStock": {
             "type": "integer",
@@ -1586,11 +1628,18 @@
           },
           "costPrice": {
             "type": "number",
+            "description": "Costo neto (sin IVA)",
             "example": 19.99
           },
           "salePrice": {
             "type": "number",
+            "description": "Precio de venta neto (sin IVA)",
             "example": 19.99
+          },
+          "taxExempt": {
+            "type": "boolean",
+            "default": false,
+            "description": "Exento de IVA"
           },
           "minStock": {
             "type": "integer",
@@ -1641,6 +1690,16 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "subtotal": {
+            "type": "string",
+            "description": "Neto",
+            "example": "19.99"
+          },
+          "tax": {
+            "type": "string",
+            "description": "IVA crédito fiscal",
+            "example": "19.99"
           },
           "total": {
             "type": "string",
@@ -1732,6 +1791,12 @@
                 },
                 "unitCost": {
                   "type": "string",
+                  "description": "Costo neto unitario",
+                  "example": "19.99"
+                },
+                "taxRate": {
+                  "type": "string",
+                  "description": "Tasa de IVA aplicada (%)",
                   "example": "19.99"
                 },
                 "product": {
@@ -1764,6 +1829,7 @@
                 "quantity",
                 "receivedQuantity",
                 "unitCost",
+                "taxRate",
                 "product"
               ]
             }
@@ -1783,6 +1849,8 @@
           "status",
           "expectedDate",
           "notes",
+          "subtotal",
+          "tax",
           "total",
           "supplier",
           "warehouse",
@@ -1915,6 +1983,16 @@
             "type": "string",
             "nullable": true
           },
+          "subtotal": {
+            "type": "string",
+            "description": "Neto",
+            "example": "19.99"
+          },
+          "tax": {
+            "type": "string",
+            "description": "IVA",
+            "example": "19.99"
+          },
           "total": {
             "type": "string",
             "example": "19.99"
@@ -2003,6 +2081,12 @@
                 },
                 "unitPrice": {
                   "type": "string",
+                  "description": "Precio neto unitario",
+                  "example": "19.99"
+                },
+                "taxRate": {
+                  "type": "string",
+                  "description": "Tasa de IVA aplicada (%)",
                   "example": "19.99"
                 },
                 "product": {
@@ -2034,6 +2118,7 @@
                 "productId",
                 "quantity",
                 "unitPrice",
+                "taxRate",
                 "product"
               ]
             }
@@ -2052,6 +2137,8 @@
           "number",
           "status",
           "notes",
+          "subtotal",
+          "tax",
           "total",
           "customer",
           "warehouse",
@@ -2097,7 +2184,7 @@
                 },
                 "unitPrice": {
                   "type": "number",
-                  "description": "Por defecto, el precio de venta del producto",
+                  "description": "Precio neto. Por defecto, el precio de venta del producto",
                   "example": 19.99
                 }
               },
@@ -2278,6 +2365,173 @@
           "createdAt",
           "user",
           "apiKey"
+        ]
+      },
+      "Webhook": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "number"
+              },
+              "success": {
+                "type": "number"
+              },
+              "failed": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "pending",
+              "success",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "events",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+          "stats"
+        ]
+      },
+      "WebhookEvent": {
+        "type": "string",
+        "enum": [
+          "*",
+          "inventory.movements.created",
+          "inventory.low_stock",
+          "product.created",
+          "product.updated",
+          "product.deleted",
+          "purchase_order.created",
+          "purchase_order.status_changed",
+          "sales_order.created",
+          "sales_order.status_changed"
+        ]
+      },
+      "WebhookInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100,
+            "example": "ERP contable"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://erp.miempresa.cl/webhooks/inventario"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEvent"
+            },
+            "minItems": 1,
+            "description": "Eventos a recibir; \"*\" para todos"
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "events"
+        ]
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "FAILED"
+            ]
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "responseStatus": {
+            "type": "number",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "payload": {
+            "nullable": true
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deliveredAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "status",
+          "attempts",
+          "responseStatus",
+          "error",
+          "nextAttemptAt",
+          "deliveredAt",
+          "createdAt"
         ]
       }
     },
@@ -5219,7 +5473,7 @@
           "Inventario"
         ],
         "summary": "Registrar entrada de mercadería",
-        "description": "Si se indica `unitCost`, se recalcula el costo promedio ponderado del producto.\n\n**Rol mínimo:** `OPERATOR`",
+        "description": "Si se indica `unitCost` (neto), se recalcula el costo promedio ponderado del producto.\n\n**Rol mínimo:** `OPERATOR`",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5279,7 +5533,7 @@
           "Inventario"
         ],
         "summary": "Registrar salida de mercadería",
-        "description": "Falla con 422 si no hay stock suficiente.\n\n**Rol mínimo:** `OPERATOR`",
+        "description": "Solo puede usar el stock disponible (físico − reservado por ventas confirmadas). Falla con 422 si no alcanza.\n\n**Rol mínimo:** `OPERATOR`",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7347,7 +7601,7 @@
           "Órdenes de venta"
         ],
         "summary": "Confirmar orden",
-        "description": "Valida disponibilidad de stock. DRAFT → CONFIRMED\n\n**Rol mínimo:** `OPERATOR`",
+        "description": "Reserva el stock en el almacén (deja de estar disponible para otras salidas). Falla con 422 si no alcanza. DRAFT → CONFIRMED\n\n**Rol mínimo:** `OPERATOR`",
         "parameters": [
           {
             "schema": {
@@ -7410,7 +7664,7 @@
           "Órdenes de venta"
         ],
         "summary": "Despachar orden",
-        "description": "Descuenta stock (movimientos SALE). CONFIRMED → FULFILLED\n\n**Rol mínimo:** `OPERATOR`",
+        "description": "Consume la reserva y descuenta el stock (movimientos SALE). CONFIRMED → FULFILLED\n\n**Rol mínimo:** `OPERATOR`",
         "parameters": [
           {
             "schema": {
@@ -7473,7 +7727,7 @@
           "Órdenes de venta"
         ],
         "summary": "Cancelar orden",
-        "description": "Solo DRAFT o CONFIRMED.\n\n**Rol mínimo:** `OPERATOR`",
+        "description": "Solo DRAFT o CONFIRMED. Si estaba confirmada, libera la reserva.\n\n**Rol mínimo:** `OPERATOR`",
         "parameters": [
           {
             "schema": {
@@ -8046,7 +8300,7 @@
         "tags": [
           "Reportes"
         ],
-        "summary": "Ventas despachadas por día",
+        "summary": "Ventas despachadas por día (montos netos, sin IVA)",
         "description": "**Rol mínimo:** `VIEWER`",
         "parameters": [
           {
@@ -8298,6 +8552,693 @@
                     "data",
                     "meta"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/events": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Eventos disponibles",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Listar webhooks",
+        "description": "Cada envío es un `POST` JSON `{ id, event, createdAt, data }` con las cabeceras `X-Webhook-Event`, `X-Webhook-Id`, `X-Webhook-Timestamp` y `X-Webhook-Signature: sha256=HMAC_SHA256(secret, \"<timestamp>.<body>\")`. Responda 2xx para confirmar; si no, se reintenta con espera exponencial (hasta 6 intentos).\n\n**Rol mínimo:** `ADMIN`",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Webhook"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Crear webhook",
+        "description": "El `secret` para verificar las firmas se devuelve **una sola vez**. Cada envío es un `POST` JSON `{ id, event, createdAt, data }` con las cabeceras `X-Webhook-Event`, `X-Webhook-Id`, `X-Webhook-Timestamp` y `X-Webhook-Signature: sha256=HMAC_SHA256(secret, \"<timestamp>.<body>\")`. Responda 2xx para confirmar; si no, se reintenta con espera exponencial (hasta 6 intentos).\n\n**Rol mínimo:** `ADMIN`",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Webhook"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "secret": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "secret"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Obtener webhook",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Actualizar webhook",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Eliminar webhook",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sin contenido"
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/rotate-secret": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Regenerar el secreto de firma",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "secret"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/test": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Enviar un evento de prueba",
+        "description": "Encola un evento `webhook.test` solo para este webhook.\n\n**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "queued"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/deliveries": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Historial de envíos",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "description": "Número de página (desde 1)"
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "description": "Elementos por página (máx. 100)"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "SUCCESS",
+                "FAILED"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WebhookDelivery"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/deliveries/{id}/retry": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Reintentar un envío",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDelivery"
                 }
               }
             }

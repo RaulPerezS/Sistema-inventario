@@ -30,6 +30,7 @@ model User {
 
   refreshTokens  RefreshToken[]
   apiKeys        ApiKey[]
+  webhooks       Webhook[]
   movements      StockMovement[]
   purchaseOrders PurchaseOrder[]
   salesOrders    SalesOrder[]
@@ -173,6 +174,7 @@ model Product {
   salePrice   Decimal   @default(0) @db.Decimal(14, 2)
   minStock    Int       @default(0)
   maxStock    Int?
+  taxExempt   Boolean   @default(false) // Exento de IVA
   isActive    Boolean   @default(true)
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
@@ -195,7 +197,8 @@ model Stock {
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouseId String    @db.Uuid
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  quantity    Int       @default(0)
+  quantity    Int       @default(0) // Existencia física
+  reserved    Int       @default(0) // Comprometido por órdenes de venta confirmadas
   updatedAt   DateTime  @updatedAt
 
   @@id([productId, warehouseId])
@@ -266,6 +269,8 @@ model PurchaseOrder {
   status       PurchaseOrderStatus @default(DRAFT)
   expectedDate DateTime?
   notes        String?
+  subtotal     Decimal             @default(0) @db.Decimal(14, 2) // Neto
+  tax          Decimal             @default(0) @db.Decimal(14, 2) // IVA
   total        Decimal             @default(0) @db.Decimal(14, 2)
   createdById  String?             @db.Uuid
   createdBy    User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -290,7 +295,8 @@ model PurchaseOrderItem {
   product          Product       @relation(fields: [productId], references: [id])
   quantity         Int
   receivedQuantity Int           @default(0)
-  unitCost         Decimal       @db.Decimal(14, 2)
+  unitCost         Decimal       @db.Decimal(14, 2) // Neto
+  taxRate          Decimal       @default(0) @db.Decimal(5, 2)
 
   @@unique([purchaseOrderId, productId])
   @@map("purchase_order_items")
@@ -312,6 +318,8 @@ model SalesOrder {
   warehouse   Warehouse        @relation(fields: [warehouseId], references: [id])
   status      SalesOrderStatus @default(DRAFT)
   notes       String?
+  subtotal    Decimal          @default(0) @db.Decimal(14, 2) // Neto
+  tax         Decimal          @default(0) @db.Decimal(14, 2) // IVA
   total       Decimal          @default(0) @db.Decimal(14, 2)
   createdById String?          @db.Uuid
   createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -335,8 +343,53 @@ model SalesOrderItem {
   productId    String     @db.Uuid
   product      Product    @relation(fields: [productId], references: [id])
   quantity     Int
-  unitPrice    Decimal    @db.Decimal(14, 2)
+  unitPrice    Decimal    @db.Decimal(14, 2) // Neto
+  taxRate      Decimal    @default(0) @db.Decimal(5, 2)
 
   @@unique([salesOrderId, productId])
   @@map("sales_order_items")
+}
+
+// ─────────────────────────────── Webhooks ───────────────────────────────
+
+model Webhook {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  url         String
+  secret      String // Clave para firmar (HMAC-SHA256) cada envío
+  events      String[] // Eventos suscritos; "*" = todos
+  isActive    Boolean  @default(true)
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+enum DeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model WebhookDelivery {
+  id             String         @id @default(uuid()) @db.Uuid
+  webhookId      String         @db.Uuid
+  webhook        Webhook        @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event          String
+  payload        Json
+  status         DeliveryStatus @default(PENDING)
+  attempts       Int            @default(0)
+  responseStatus Int?
+  error          String?
+  nextAttemptAt  DateTime       @default(now())
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([webhookId, createdAt])
+  @@map("webhook_deliveries")
 }

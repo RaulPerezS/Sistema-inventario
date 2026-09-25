@@ -16,6 +16,15 @@ const EnvSchema = z.object({
   RATE_LIMIT_WINDOW_MIN: z.coerce.number().positive().default(15),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+  // Parámetros tributarios y monetarios (Chile por defecto)
+  TAX_RATE: z.coerce.number().min(0).max(100).default(19),
+  CURRENCY: z.string().length(3).default('CLP'),
+  MONEY_DECIMALS: z.coerce.number().int().min(0).max(2).default(0),
+  // Worker de webhooks
+  WEBHOOKS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

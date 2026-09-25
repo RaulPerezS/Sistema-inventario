@@ -14,7 +14,7 @@ describe('Catálogo, stock y órdenes', () => {
     t = await setupUsers();
     central = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'central', name: 'Central' })).body.id;
     norte = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'NORTE', name: 'Norte' })).body.id;
-    supplierId = (await api().post('/api/v1/suppliers').set(auth(t.MANAGER)).send({ name: 'Proveedor Uno', taxId: '123' })).body.id;
+    supplierId = (await api().post('/api/v1/suppliers').set(auth(t.MANAGER)).send({ name: 'Proveedor Uno', taxId: '76.123.456-0' })).body.id;
   });
   afterAll(() => prisma.$disconnect());
 
@@ -104,7 +104,10 @@ describe('Catálogo, stock y órdenes', () => {
       .send({ supplierId, warehouseId: central, items: [{ productId, quantity: 10, unitCost: 15 }] });
     expect(created.status).toBe(201);
     expect(created.body.number).toBe('OC-000001');
-    expect(created.body.total).toBe('150');
+    // Neto 150 + IVA 19 % (28,5 → 29 en pesos) = 179
+    expect(created.body.subtotal).toBe('150');
+    expect(created.body.tax).toBe('29');
+    expect(created.body.total).toBe('179');
     const id = created.body.id;
 
     expect((await api().post(`/api/v1/purchase-orders/${id}/receive`).set(auth(t.OPERATOR)).send({})).status).toBe(409);

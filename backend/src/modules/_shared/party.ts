@@ -1,4 +1,5 @@
 import { z } from '../../docs/zod.js';
+import { isValidRut, normalizeRut } from '../../lib/rut.js';
 import { IdParams, optionalText, Timestamps } from '../../lib/common-schemas.js';
 import { orderArgs, pageArgs, paginated, PaginationQuery, QueryBool } from '../../lib/pagination.js';
 import { paginatedOf } from '../../docs/registry.js';
@@ -8,7 +9,10 @@ import { Conflict, NotFound } from '../../lib/errors.js';
 
 export const partyFields = {
   name: z.string().trim().min(2).max(150),
-  taxId: optionalText(30).openapi({ description: 'Identificación fiscal (RUC/NIT/RFC...)' }),
+  taxId: optionalText(20)
+    .refine((v) => v == null || isValidRut(v), 'RUT inválido (verifique el dígito verificador)')
+    .transform((v) => (v == null ? v : normalizeRut(v)))
+    .openapi({ type: 'string', description: 'RUT chileno. Acepta "12.345.678-5" o "123456785"; se almacena como "12345678-5".', example: '76.123.456-0' }),
   email: z.string().trim().email().nullish().or(z.literal('').transform(() => null)),
   phone: optionalText(40),
   address: optionalText(300),
@@ -59,7 +63,7 @@ export function partyRouter(cfg: PartyConfig) {
         ...(query.search && {
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
-            { taxId: { contains: query.search, mode: 'insensitive' } },
+            { taxId: { contains: query.search.replace(/\./g, ''), mode: 'insensitive' } },
             { email: { contains: query.search, mode: 'insensitive' } },
           ],
         }),

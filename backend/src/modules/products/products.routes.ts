@@ -6,6 +6,7 @@ import { orderArgs, pageArgs, paginated } from '../../lib/pagination.js';
 import { paginatedOf } from '../../docs/registry.js';
 import { audit } from '../../lib/audit.js';
 import { toCsv } from '../../lib/csv.js';
+import { emit } from '../../lib/webhooks.js';
 import { Conflict, NotFound } from '../../lib/errors.js';
 import { applyStockChange, inTransaction, movementInclude } from '../inventory/inventory.service.js';
 import { MovementOut, MovementsQuery } from '../inventory/inventory.schemas.js';
@@ -44,6 +45,8 @@ export const productsRouter = new ApiRouter('/products', 'Productos')
           minStock: p.minStock,
           maxStock: p.maxStock,
           totalStock: p.totalStock,
+          availableStock: p.availableStock,
+          taxExempt: p.taxExempt ? 'SI' : 'NO',
           isActive: p.isActive ? 'SI' : 'NO',
         })),
         [
@@ -53,11 +56,13 @@ export const productsRouter = new ApiRouter('/products', 'Productos')
           { key: 'category', header: 'Categoría' },
           { key: 'supplier', header: 'Proveedor' },
           { key: 'unit', header: 'Unidad' },
-          { key: 'costPrice', header: 'Costo' },
-          { key: 'salePrice', header: 'Precio venta' },
+          { key: 'costPrice', header: 'Costo neto' },
+          { key: 'salePrice', header: 'Precio venta neto' },
           { key: 'minStock', header: 'Stock mínimo' },
           { key: 'maxStock', header: 'Stock máximo' },
-          { key: 'totalStock', header: 'Stock total' },
+          { key: 'totalStock', header: 'Stock físico' },
+          { key: 'availableStock', header: 'Stock disponible' },
+          { key: 'taxExempt', header: 'Exento IVA' },
           { key: 'isActive', header: 'Activo' },
         ],
       );
@@ -119,7 +124,9 @@ export const productsRouter = new ApiRouter('/products', 'Productos')
       return created;
     });
     await audit(req, { action: 'CREATE', entity: 'Product', entityId: product.id, changes: body });
-    return getProduct({ id: product.id });
+    const created = await getProduct({ id: product.id });
+    await emit('product.created', created);
+    return created;
   })
   .patch(
     '/:id',
@@ -129,7 +136,9 @@ export const productsRouter = new ApiRouter('/products', 'Productos')
       if (!before) throw NotFound('Producto');
       await prisma.product.update({ where: { id: params.id }, data: body });
       await audit(req, { action: 'UPDATE', entity: 'Product', entityId: params.id, changes: body });
-      return getProduct({ id: params.id });
+      const updated = await getProduct({ id: params.id });
+      await emit('product.updated', updated);
+      return updated;
     },
   )
   .delete(
@@ -140,5 +149,6 @@ export const productsRouter = new ApiRouter('/products', 'Productos')
       if (product.totalStock > 0) throw Conflict(`El producto aún tiene ${product.totalStock} unidades en stock`);
       await prisma.product.update({ where: { id: params.id }, data: { deletedAt: new Date(), isActive: false } });
       await audit(req, { action: 'DELETE', entity: 'Product', entityId: params.id });
+      await emit('product.deleted', { id: product.id, sku: product.sku, name: product.name });
     },
   );

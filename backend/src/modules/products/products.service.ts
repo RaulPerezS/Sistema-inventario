@@ -17,12 +17,12 @@ export async function withStockTotals<T extends ProductRow>(products: T[]) {
   const sums = await prisma.stock.groupBy({
     by: ['productId'],
     where: { productId: { in: products.map((p) => p.id) } },
-    _sum: { quantity: true },
+    _sum: { quantity: true, reserved: true },
   });
-  const map = new Map(sums.map((s) => [s.productId, s._sum.quantity ?? 0]));
+  const map = new Map(sums.map((s) => [s.productId, { quantity: s._sum.quantity ?? 0, reserved: s._sum.reserved ?? 0 }]));
   return products.map((p) => {
-    const totalStock = map.get(p.id) ?? 0;
-    return { ...p, totalStock, isLowStock: totalStock <= p.minStock };
+    const { quantity: totalStock, reserved: reservedStock } = map.get(p.id) ?? { quantity: 0, reserved: 0 };
+    return { ...p, totalStock, reservedStock, availableStock: totalStock - reservedStock, isLowStock: totalStock <= p.minStock };
   });
 }
 

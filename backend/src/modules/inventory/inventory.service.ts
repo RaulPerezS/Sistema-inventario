@@ -17,6 +17,8 @@ export interface StockChange {
   salesOrderId?: string;
   /** Recalcula el costo promedio ponderado del producto (entradas con costo). */
   updateAverageCost?: boolean;
+  /** La salida consume unidades previamente reservadas (despacho de venta). */
+  consumeReserved?: boolean;
 }
 
 export const movementInclude = {
@@ -68,13 +70,26 @@ export async function applyStockChange(tx: Tx, change: StockChange) {
     balanceAfter = stock.quantity;
   } else {
     const qty = -change.delta;
-    const updated = await tx.stock.updateMany({ where: { ...key, quantity: { gte: qty } }, data: { quantity: { decrement: qty } } });
-    if (updated.count === 0) {
+    // Salida atómica: solo descuenta lo disponible (físico − reservado), salvo que
+    // se esté consumiendo una reserva propia (despacho de una venta confirmada).
+    const updated = change.consumeReserved
+      ? await tx.$executeRaw`
+          UPDATE stocks SET quantity = quantity - ${qty}, reserved = reserved - ${qty}, "updatedAt" = now()
+          WHERE "productId" = ${change.productId}::uuid AND "warehouseId" = ${change.warehouseId}::uuid
+            AND reserved >= ${qty} AND quantity >= ${qty}`
+      : await tx.$executeRaw`
+          UPDATE stocks SET quantity = quantity - ${qty}, "updatedAt" = now()
+          WHERE "productId" = ${change.productId}::uuid AND "warehouseId" = ${change.warehouseId}::uuid
+            AND quantity - reserved >= ${qty}`;
+    if (updated === 0) {
       const current = await tx.stock.findUnique({ where: { productId_warehouseId: key } });
-      throw Unprocessable(`Stock insuficiente para ${product.sku}: disponible ${current?.quantity ?? 0}, solicitado ${qty}`, {
+      const available = (current?.quantity ?? 0) - (current?.reserved ?? 0);
+      const reservedNote = current?.reserved ? ` (${current.reserved} reservadas)` : '';
+      throw Unprocessable(`Stock insuficiente para ${product.sku}: disponible ${available}${reservedNote}, solicitado ${qty}`, {
         productId: change.productId,
         warehouseId: change.warehouseId,
-        available: current?.quantity ?? 0,
+        available,
+        reserved: current?.reserved ?? 0,
         requested: qty,
       });
     }
@@ -115,5 +130,39 @@ export async function inTransaction<T>(fn: (tx: Tx) => Promise<T>, retries = 3):
       const retryable = err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2034' || err.code === 'P2002');
       if (!retryable || attempt >= retries) throw err;
     }
+  }
+}
+
+export interface ReservationLine {
+  productId: string;
+  quantity: number;
+  product?: { sku: string };
+}
+
+/**
+ * Reserva stock para una orden de venta. Es atómico por fila (`quantity - reserved >= n`)
+ * y reporta todos los faltantes a la vez; ante cualquier faltante la transacción se revierte.
+ */
+export async function reserveStock(tx: Tx, warehouseId: string, lines: ReservationLine[]) {
+  const shortages: { productId: string; sku?: string; requested: number; available: number }[] = [];
+  for (const line of lines) {
+    const updated = await tx.$executeRaw`
+      UPDATE stocks SET reserved = reserved + ${line.quantity}, "updatedAt" = now()
+      WHERE "productId" = ${line.productId}::uuid AND "warehouseId" = ${warehouseId}::uuid
+        AND quantity - reserved >= ${line.quantity}`;
+    if (updated === 0) {
+      const s = await tx.stock.findUnique({ where: { productId_warehouseId: { productId: line.productId, warehouseId } } });
+      shortages.push({ productId: line.productId, sku: line.product?.sku, requested: line.quantity, available: (s?.quantity ?? 0) - (s?.reserved ?? 0) });
+    }
+  }
+  if (shortages.length) throw Unprocessable('Stock disponible insuficiente para uno o más productos', { shortages });
+}
+
+/** Libera una reserva (cancelación de una orden confirmada). */
+export async function releaseReservation(tx: Tx, warehouseId: string, lines: ReservationLine[]) {
+  for (const line of lines) {
+    await tx.$executeRaw`
+      UPDATE stocks SET reserved = GREATEST(reserved - ${line.quantity}, 0), "updatedAt" = now()
+      WHERE "productId" = ${line.productId}::uuid AND "warehouseId" = ${warehouseId}::uuid`;
   }
 }

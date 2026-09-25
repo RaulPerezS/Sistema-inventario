@@ -18,15 +18,18 @@ export const ProductOut = z
     salePrice: DecimalOut,
     minStock: z.number().int(),
     maxStock: z.number().int().nullable(),
+    taxExempt: z.boolean().openapi({ description: 'Producto exento de IVA' }),
     isActive: z.boolean(),
-    totalStock: z.number().int().openapi({ description: 'Suma de existencias en todos los almacenes' }),
+    totalStock: z.number().int().openapi({ description: 'Suma de existencias físicas en todos los almacenes' }),
+    reservedStock: z.number().int().openapi({ description: 'Unidades reservadas por ventas confirmadas' }),
+    availableStock: z.number().int().openapi({ description: 'Disponible para vender = físico − reservado' }),
     isLowStock: z.boolean(),
     ...Timestamps,
   })
   .openapi('Product');
 
 export const ProductDetailOut = ProductOut.extend({
-  stocks: z.array(z.object({ quantity: z.number(), warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }) })),
+  stocks: z.array(z.object({ quantity: z.number(), reserved: z.number(), warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }) })),
 }).openapi('ProductDetail');
 
 const base = {
@@ -44,8 +47,9 @@ const base = {
   unit: z.string().trim().toUpperCase().min(1).max(10).default('UND').openapi({ example: 'UND' }),
   categoryId: z.string().uuid().nullish(),
   supplierId: z.string().uuid().nullish(),
-  costPrice: Money.default(0),
-  salePrice: Money.default(0),
+  costPrice: Money.default(0).openapi({ description: 'Costo neto (sin IVA)' }),
+  salePrice: Money.default(0).openapi({ description: 'Precio de venta neto (sin IVA)' }),
+  taxExempt: z.boolean().default(false).openapi({ description: 'Exento de IVA' }),
   minStock: z.coerce.number().int().min(0).default(0),
   maxStock: z.coerce.number().int().min(0).nullish(),
   isActive: z.boolean().default(true),

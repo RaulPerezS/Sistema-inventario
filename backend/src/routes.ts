@@ -15,6 +15,7 @@ import { purchaseOrdersRouter } from './modules/purchase-orders/purchase-orders.
 import { salesOrdersRouter } from './modules/sales-orders/sales-orders.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
+import { webhooksRouter } from './modules/webhooks/webhooks.routes.js';
 
 const healthRouter = new ApiRouter('/health', 'Sistema').get(
   '/',
@@ -51,6 +52,7 @@ const modules: [string, ApiRouter][] = [
   ['/sales-orders', salesOrdersRouter],
   ['/reports', reportsRouter],
   ['/audit-logs', auditRouter],
+  ['/webhooks', webhooksRouter],
 ];
 
 export const apiRouter = Router();

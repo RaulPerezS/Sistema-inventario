@@ -7,6 +7,7 @@ import { orderArgs, pageArgs, paginated } from '../../lib/pagination.js';
 import { paginatedOf } from '../../docs/registry.js';
 import { audit } from '../../lib/audit.js';
 import { toCsv } from '../../lib/csv.js';
+import { emit, notifyLowStock } from '../../lib/webhooks.js';
 import { applyStockChange, assertUniqueProducts, inTransaction, movementInclude } from './inventory.service.js';
 import {
   AdjustmentBody,
@@ -73,7 +74,11 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         }),
         prisma.stock.count({ where }),
       ]);
-      return paginated(data, total, query);
+      return paginated(
+        data.map((s) => ({ ...s, available: s.quantity - s.reserved })),
+        total,
+        query,
+      );
     },
   )
   .get(
@@ -135,7 +140,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
     '/entries',
     {
       summary: 'Registrar entrada de mercadería',
-      description: 'Si se indica `unitCost`, se recalcula el costo promedio ponderado del producto.',
+      description: 'Si se indica `unitCost` (neto), se recalcula el costo promedio ponderado del producto.',
       role: 'OPERATOR',
       body: EntryBody,
       response: MovementsResult,
@@ -163,12 +168,13 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_IN', entity: 'StockMovement', changes: body });
+      await emit('inventory.movements.created', { movements });
       return { movements };
     },
   )
   .post(
     '/exits',
-    { summary: 'Registrar salida de mercadería', description: 'Falla con 422 si no hay stock suficiente.', role: 'OPERATOR', body: ExitBody, response: MovementsResult, status: 201 },
+    { summary: 'Registrar salida de mercadería', description: 'Solo puede usar el stock disponible (físico − reservado por ventas confirmadas). Falla con 422 si no alcanza.', role: 'OPERATOR', body: ExitBody, response: MovementsResult, status: 201 },
     async ({ req, body }) => {
       assertUniqueProducts(body.items);
       const movements = await inTransaction(async (tx) => {
@@ -189,6 +195,8 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_OUT', entity: 'StockMovement', changes: body });
+      await emit('inventory.movements.created', { movements });
+      await notifyLowStock(body.items.map((i) => i.productId));
       return { movements };
     },
   )
@@ -221,6 +229,8 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_ADJUSTMENT', entity: 'StockMovement', changes: body });
+      await emit('inventory.movements.created', { movements });
+      await notifyLowStock(body.items.map((i) => i.productId));
       return { movements };
     },
   )
@@ -240,6 +250,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_TRANSFER', entity: 'StockMovement', entityId: transferId, changes: body });
+      await emit('inventory.movements.created', { transferId, movements });
       return { transferId, movements };
     },
   );

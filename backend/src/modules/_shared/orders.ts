@@ -1,4 +1,5 @@
 import { Prisma, type Tx } from '../../lib/prisma.js';
+import { env } from '../../config/env.js';
 import { BadRequest, Conflict, NotFound, Unprocessable } from '../../lib/errors.js';
 
 /** Valida que los productos existan, estén activos y no se repitan. */
@@ -13,9 +14,37 @@ export async function loadOrderProducts(tx: Tx, productIds: string[]) {
   return map;
 }
 
-export function orderTotal(items: { quantity: number; price: Prisma.Decimal | number }[]) {
-  return items.reduce((acc, i) => acc.add(new Prisma.Decimal(i.price).mul(i.quantity)), new Prisma.Decimal(0)).toDecimalPlaces(2);
+export interface TaxedLine {
+  quantity: number;
+  price: Prisma.Decimal | number;
+  /** Tasa de IVA en porcentaje (0 si el producto es exento). */
+  taxRate: Prisma.Decimal | number;
 }
+
+const round = (d: Prisma.Decimal) => d.toDecimalPlaces(env.MONEY_DECIMALS, Prisma.Decimal.ROUND_HALF_UP);
+
+/**
+ * Calcula neto, IVA y total de un documento.
+ * El IVA se calcula sobre la suma neta de cada tasa y se redondea una sola vez (práctica SII).
+ */
+export function orderTotals(lines: TaxedLine[]) {
+  const byRate = new Map<string, Prisma.Decimal>();
+  let subtotal = new Prisma.Decimal(0);
+  for (const l of lines) {
+    const net = new Prisma.Decimal(l.price).mul(l.quantity);
+    subtotal = subtotal.add(net);
+    const key = new Prisma.Decimal(l.taxRate).toString();
+    byRate.set(key, (byRate.get(key) ?? new Prisma.Decimal(0)).add(net));
+  }
+  let tax = new Prisma.Decimal(0);
+  for (const [rate, net] of byRate) tax = tax.add(net.mul(rate).div(100));
+  subtotal = round(subtotal);
+  tax = round(tax);
+  return { subtotal, tax, total: subtotal.add(tax) };
+}
+
+/** Tasa de IVA aplicable a un producto. */
+export const taxRateFor = (product: { taxExempt: boolean }) => new Prisma.Decimal(product.taxExempt ? 0 : env.TAX_RATE);
 
 export async function assertActiveRefs(tx: Tx, refs: { warehouseId?: string; supplierId?: string; customerId?: string | null }) {
   if (refs.warehouseId) {

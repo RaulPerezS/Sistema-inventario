@@ -85,7 +85,9 @@ export const StockOut = z
   .object({
     productId: z.string().uuid(),
     warehouseId: z.string().uuid(),
-    quantity: z.number().int(),
+    quantity: z.number().int().openapi({ description: 'Existencia física' }),
+    reserved: z.number().int().openapi({ description: 'Reservado por órdenes de venta confirmadas' }),
+    available: z.number().int().openapi({ description: 'Disponible = físico − reservado' }),
     updatedAt: z.string().datetime(),
     product: z.object({ id: z.string(), sku: z.string(), name: z.string(), unit: z.string(), minStock: z.number(), costPrice: z.string() }),
     warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }),

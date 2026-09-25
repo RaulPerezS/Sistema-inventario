@@ -6,9 +6,10 @@ import { orderArgs, pageArgs, paginated, PaginationQuery } from '../../lib/pagin
 import { paginatedOf } from '../../docs/registry.js';
 import { audit } from '../../lib/audit.js';
 import { nextNumber } from '../../lib/sequence.js';
-import { Conflict, NotFound, Unprocessable } from '../../lib/errors.js';
-import { applyStockChange, inTransaction } from '../inventory/inventory.service.js';
-import { assertActiveRefs, loadOrderProducts, orderTotal, transition } from '../_shared/orders.js';
+import { Conflict, NotFound } from '../../lib/errors.js';
+import { applyStockChange, inTransaction, releaseReservation, reserveStock } from '../inventory/inventory.service.js';
+import { assertActiveRefs, loadOrderProducts, orderTotals, taxRateFor, transition } from '../_shared/orders.js';
+import { emit, notifyLowStock } from '../../lib/webhooks.js';
 
 const StatusEnum = z.enum(['DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED']).openapi('SalesOrderStatus');
 
@@ -18,6 +19,8 @@ const SalesOrderOut = z
     number: z.string().openapi({ example: 'OV-000001' }),
     status: StatusEnum,
     notes: z.string().nullable(),
+    subtotal: DecimalOut.openapi({ description: 'Neto' }),
+    tax: DecimalOut.openapi({ description: 'IVA' }),
     total: DecimalOut,
     customer: z.object({ id: z.string(), name: z.string() }).nullable(),
     warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }),
@@ -30,7 +33,8 @@ const SalesOrderOut = z
         id: z.string().uuid(),
         productId: z.string().uuid(),
         quantity: z.number().int(),
-        unitPrice: DecimalOut,
+        unitPrice: DecimalOut.openapi({ description: 'Precio neto unitario' }),
+        taxRate: DecimalOut.openapi({ description: 'Tasa de IVA aplicada (%)' }),
         product: z.object({ id: z.string(), sku: z.string(), name: z.string(), unit: z.string() }),
       }),
     ),
@@ -48,7 +52,7 @@ const OrderBody = z
         z.object({
           productId: z.string().uuid(),
           quantity: z.coerce.number().int().positive(),
-          unitPrice: Money.optional().openapi({ description: 'Por defecto, el precio de venta del producto' }),
+          unitPrice: Money.optional().openapi({ description: 'Precio neto. Por defecto, el precio de venta del producto' }),
         }),
       )
       .min(1)
@@ -80,23 +84,20 @@ async function findOrder(id: string) {
 async function buildItems(tx: Tx, body: z.infer<typeof OrderBody>) {
   await assertActiveRefs(tx, { warehouseId: body.warehouseId, customerId: body.customerId });
   const products = await loadOrderProducts(tx, body.items.map((i) => i.productId));
-  const items = body.items.map((i) => ({
-    productId: i.productId,
-    quantity: i.quantity,
-    unitPrice: new Prisma.Decimal(i.unitPrice ?? products.get(i.productId)!.salePrice),
-  }));
-  return { items, total: orderTotal(items.map((i) => ({ quantity: i.quantity, price: i.unitPrice }))) };
+  const items = body.items.map((i) => {
+    const product = products.get(i.productId)!;
+    return {
+      productId: i.productId,
+      quantity: i.quantity,
+      unitPrice: new Prisma.Decimal(i.unitPrice ?? product.salePrice),
+      taxRate: taxRateFor(product),
+    };
+  });
+  return { items, ...orderTotals(items.map((i) => ({ quantity: i.quantity, price: i.unitPrice, taxRate: i.taxRate }))) };
 }
 
-/** Verifica disponibilidad de todos los ítems y reporta todos los faltantes a la vez. */
-async function assertAvailability(tx: Tx, warehouseId: string, items: { productId: string; quantity: number; product?: { sku: string } }[]) {
-  const stocks = await tx.stock.findMany({ where: { warehouseId, productId: { in: items.map((i) => i.productId) } } });
-  const available = new Map(stocks.map((s) => [s.productId, s.quantity]));
-  const shortages = items
-    .filter((i) => (available.get(i.productId) ?? 0) < i.quantity)
-    .map((i) => ({ productId: i.productId, sku: i.product?.sku, requested: i.quantity, available: available.get(i.productId) ?? 0 }));
-  if (shortages.length) throw Unprocessable('Stock insuficiente para uno o más productos', { shortages });
-}
+const statusEvent = (id: string, status: string) =>
+  findOrder(id).then((order) => emit('sales_order.status_changed', { status, order }));
 
 export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de venta')
   .get('/', { summary: 'Listar órdenes de venta', role: 'VIEWER', query: ListQuery, response: paginatedOf(SalesOrderOut) }, async ({ query }) => {
@@ -121,7 +122,7 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
   .get('/:id', { summary: 'Obtener orden de venta', role: 'VIEWER', params: IdParams, response: SalesOrderOut }, ({ params }) => findOrder(params.id))
   .post('/', { summary: 'Crear orden de venta (borrador)', role: 'OPERATOR', body: OrderBody, response: SalesOrderOut, status: 201 }, async ({ req, body }) => {
     const id = await inTransaction(async (tx) => {
-      const { items, total } = await buildItems(tx, body);
+      const { items, subtotal, tax, total } = await buildItems(tx, body);
       const order = await tx.salesOrder.create({
         data: {
           number: await nextNumber(tx, 'sales_order', 'OV'),
@@ -129,6 +130,8 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
           warehouseId: body.warehouseId,
           notes: body.notes,
           createdById: req.auth?.userId,
+          subtotal,
+          tax,
           total,
           items: { create: items },
         },
@@ -136,7 +139,9 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
       return order.id;
     });
     await audit(req, { action: 'CREATE', entity: 'SalesOrder', entityId: id, changes: body });
-    return findOrder(id);
+    const created = await findOrder(id);
+    await emit('sales_order.created', created);
+    return created;
   })
   .put(
     '/:id',
@@ -146,11 +151,11 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
         const order = await tx.salesOrder.findUnique({ where: { id: params.id } });
         if (!order) throw NotFound('Orden de venta');
         if (order.status !== 'DRAFT') throw Conflict('Solo se pueden editar órdenes en borrador');
-        const { items, total } = await buildItems(tx, body);
+        const { items, subtotal, tax, total } = await buildItems(tx, body);
         await tx.salesOrderItem.deleteMany({ where: { salesOrderId: order.id } });
         await tx.salesOrder.update({
           where: { id: order.id },
-          data: { customerId: body.customerId ?? null, warehouseId: body.warehouseId, notes: body.notes, total, items: { create: items } },
+          data: { customerId: body.customerId ?? null, warehouseId: body.warehouseId, notes: body.notes, subtotal, tax, total, items: { create: items } },
         });
       });
       await audit(req, { action: 'UPDATE', entity: 'SalesOrder', entityId: params.id, changes: body });
@@ -159,31 +164,38 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
   )
   .post(
     '/:id/confirm',
-    { summary: 'Confirmar orden', description: 'Valida disponibilidad de stock. DRAFT → CONFIRMED', role: 'OPERATOR', params: IdParams, response: SalesOrderOut },
+    {
+      summary: 'Confirmar orden',
+      description: 'Reserva el stock en el almacén (deja de estar disponible para otras salidas). Falla con 422 si no alcanza. DRAFT → CONFIRMED',
+      role: 'OPERATOR',
+      params: IdParams,
+      response: SalesOrderOut,
+    },
     async ({ req, params }) => {
       const order = await findOrder(params.id);
       await inTransaction(async (tx) => {
-        await assertAvailability(tx, order.warehouseId, order.items);
         await transition((a) => tx.salesOrder.updateMany(a), params.id, ['DRAFT'], { status: 'CONFIRMED', confirmedAt: new Date() }, 'confirmar');
+        await reserveStock(tx, order.warehouseId, order.items);
       });
       await audit(req, { action: 'CONFIRM', entity: 'SalesOrder', entityId: params.id });
+      await statusEvent(params.id, 'CONFIRMED');
       return findOrder(params.id);
     },
   )
   .post(
     '/:id/fulfill',
-    { summary: 'Despachar orden', description: 'Descuenta stock (movimientos SALE). CONFIRMED → FULFILLED', role: 'OPERATOR', params: IdParams, response: SalesOrderOut },
+    { summary: 'Despachar orden', description: 'Consume la reserva y descuenta el stock (movimientos SALE). CONFIRMED → FULFILLED', role: 'OPERATOR', params: IdParams, response: SalesOrderOut },
     async ({ req, params }) => {
       const order = await findOrder(params.id);
       await inTransaction(async (tx) => {
         await transition((a) => tx.salesOrder.updateMany(a), params.id, ['CONFIRMED'], { status: 'FULFILLED', fulfilledAt: new Date() }, 'despachar');
-        await assertAvailability(tx, order.warehouseId, order.items);
         for (const item of order.items) {
           await applyStockChange(tx, {
             type: 'SALE',
             productId: item.productId,
             warehouseId: order.warehouseId,
             delta: -item.quantity,
+            consumeReserved: true,
             reference: order.number,
             userId: req.auth?.userId,
             salesOrderId: order.id,
@@ -191,13 +203,21 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
         }
       });
       await audit(req, { action: 'FULFILL', entity: 'SalesOrder', entityId: params.id });
+      await statusEvent(params.id, 'FULFILLED');
+      await notifyLowStock(order.items.map((i) => i.productId));
       return findOrder(params.id);
     },
   )
-  .post('/:id/cancel', { summary: 'Cancelar orden', description: 'Solo DRAFT o CONFIRMED.', role: 'OPERATOR', params: IdParams, response: SalesOrderOut }, async ({ req, params }) => {
-    await findOrder(params.id);
-    await transition((a) => prisma.salesOrder.updateMany(a), params.id, ['DRAFT', 'CONFIRMED'], { status: 'CANCELLED', cancelledAt: new Date() }, 'cancelar');
+  .post('/:id/cancel', { summary: 'Cancelar orden', description: 'Solo DRAFT o CONFIRMED. Si estaba confirmada, libera la reserva.', role: 'OPERATOR', params: IdParams, response: SalesOrderOut }, async ({ req, params }) => {
+    const order = await findOrder(params.id);
+    await inTransaction(async (tx) => {
+      // Bloquea la orden para conocer su estado real antes de cancelar
+      const [locked] = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM sales_orders WHERE id = ${params.id}::uuid FOR UPDATE`;
+      await transition((a) => tx.salesOrder.updateMany(a), params.id, ['DRAFT', 'CONFIRMED'], { status: 'CANCELLED', cancelledAt: new Date() }, 'cancelar');
+      if (locked?.status === 'CONFIRMED') await releaseReservation(tx, order.warehouseId, order.items);
+    });
     await audit(req, { action: 'CANCEL', entity: 'SalesOrder', entityId: params.id });
+    await statusEvent(params.id, 'CANCELLED');
     return findOrder(params.id);
   })
   .delete('/:id', { summary: 'Eliminar orden en borrador', role: 'MANAGER', params: IdParams }, async ({ req, params }) => {

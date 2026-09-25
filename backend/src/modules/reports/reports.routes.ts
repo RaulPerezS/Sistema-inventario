@@ -211,7 +211,7 @@ export const reportsRouter = new ApiRouter('/reports', 'Reportes')
   .get(
     '/sales-summary',
     {
-      summary: 'Ventas despachadas por día',
+      summary: 'Ventas despachadas por día (montos netos, sin IVA)',
       role: 'VIEWER',
       query: RangeQuery,
       response: z.object({
@@ -223,7 +223,7 @@ export const reportsRouter = new ApiRouter('/reports', 'Reportes')
     async ({ query }) => {
       const { from, to } = range(query);
       const rows = await prisma.$queryRaw<{ date: Date; orders: bigint; revenue: Prisma.Decimal }[]>`
-        SELECT so."fulfilledAt"::date AS date, COUNT(*) AS orders, SUM(so.total) AS revenue
+        SELECT so."fulfilledAt"::date AS date, COUNT(*) AS orders, SUM(so.subtotal) AS revenue
         FROM sales_orders so
         WHERE so.status = 'FULFILLED' AND so."fulfilledAt" BETWEEN ${from} AND ${to} ${whereWarehouse(query.warehouseId, 'so')}
         GROUP BY 1 ORDER BY 1`;

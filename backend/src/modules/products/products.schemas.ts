@@ -29,7 +29,13 @@ export const ProductOut = z
   .openapi('Product');
 
 export const ProductDetailOut = ProductOut.extend({
-  stocks: z.array(z.object({ quantity: z.number(), reserved: z.number(), warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }) })),
+  stocks: z.array(
+    z.object({
+      quantity: z.number(),
+      reserved: z.number(),
+      warehouse: z.object({ id: z.string(), code: z.string(), name: z.string(), branch: z.object({ id: z.string(), code: z.string(), name: z.string() }) }),
+    }),
+  ),
 }).openapi('ProductDetail');
 
 const base = {

@@ -2,15 +2,15 @@ import { Router, type Request, type Response, type RequestHandler } from 'expres
 import type { Role } from '@prisma/client';
 import type { ZodTypeAny, z } from 'zod';
 import { registry, ErrorResponse } from '../docs/registry.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, requireSuperAdmin } from '../middleware/auth.js';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 export interface RouteSpec<P extends ZodTypeAny, Q extends ZodTypeAny, B extends ZodTypeAny> {
   summary: string;
   description?: string;
-  /** Rol mínimo requerido. `public` = sin autenticación. */
-  role: Role | 'public';
+  /** Rol mínimo requerido en la empresa activa. `public` = sin autenticación; `superadmin` = administrador de plataforma. */
+  role: Role | 'public' | 'superadmin';
   params?: P;
   query?: Q;
   body?: B;
@@ -54,7 +54,11 @@ export class ApiRouter {
     this.document(method, path, spec);
 
     const guards: RequestHandler[] =
-      spec.role === 'public' ? [] : [authenticate as RequestHandler, authorize(spec.role) as RequestHandler];
+      spec.role === 'public'
+        ? []
+        : spec.role === 'superadmin'
+          ? [authenticate as RequestHandler, requireSuperAdmin as RequestHandler]
+          : [authenticate as RequestHandler, authorize(spec.role) as RequestHandler];
 
     this.router[method](path, ...guards, ...(spec.middlewares ?? []), async (req: Request, res: Response) => {
       const params = (spec.params ? spec.params.parse(req.params) : {}) as Out<P>;
@@ -87,7 +91,10 @@ export class ApiRouter {
       path: fullPath,
       tags: [this.tag],
       summary: spec.summary,
-      description: [spec.description, spec.role !== 'public' ? `**Rol mínimo:** \`${spec.role}\`` : '**Público**']
+      description: [
+        spec.description,
+        spec.role === 'public' ? '**Público**' : spec.role === 'superadmin' ? '**Solo administrador de plataforma**' : `**Rol mínimo:** \`${spec.role}\``,
+      ]
         .filter(Boolean)
         .join('\n\n'),
       security: spec.role === 'public' ? [] : undefined,

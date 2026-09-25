@@ -8,7 +8,9 @@ import { audit } from '../../lib/audit.js';
 import { nextNumber } from '../../lib/sequence.js';
 import { BadRequest, Conflict, NotFound } from '../../lib/errors.js';
 import { applyStockChange, inTransaction } from '../inventory/inventory.service.js';
-import { assertActiveRefs, loadOrderProducts, orderTotals, taxRateFor, transition } from '../_shared/orders.js';
+import { assertActiveRefs, companyTaxRate, loadOrderProducts, orderTotals, taxRateFor, transition } from '../_shared/orders.js';
+import { tenant, warehouseFilter, type Tenant } from '../../lib/tenant.js';
+import type { Request } from 'express';
 import { emit } from '../../lib/webhooks.js';
 import type { Tx } from '../../lib/prisma.js';
 
@@ -73,6 +75,7 @@ const ListQuery = PaginationQuery.extend({
   status: StatusEnum.optional(),
   supplierId: z.string().uuid().optional(),
   warehouseId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
   from: DateFrom.optional(),
   to: DateTo.optional(),
 });
@@ -85,28 +88,32 @@ const include = {
 } as const;
 
 /** Ítems con la tasa de IVA vigente de cada producto y totales del documento. */
-async function buildItems(tx: Tx, body: z.infer<typeof OrderBody>) {
-  await assertActiveRefs(tx, { warehouseId: body.warehouseId, supplierId: body.supplierId });
-  const products = await loadOrderProducts(tx, body.items.map((i) => i.productId));
-  const items = body.items.map((i) => ({ ...i, taxRate: taxRateFor(products.get(i.productId)!) }));
+async function buildItems(tx: Tx, t: Tenant, body: z.infer<typeof OrderBody>) {
+  await assertActiveRefs(tx, t, { warehouseId: body.warehouseId, supplierId: body.supplierId });
+  const products = await loadOrderProducts(tx, t.companyId, body.items.map((i) => i.productId));
+  const rate = await companyTaxRate(tx, t.companyId);
+  const items = body.items.map((i) => ({ ...i, taxRate: taxRateFor(products.get(i.productId)!, rate) }));
   return { items, ...orderTotals(items.map((i) => ({ quantity: i.quantity, price: i.unitCost, taxRate: i.taxRate }))) };
 }
 
-const statusEvent = (id: string, status: string) =>
-  findOrder(id).then((order) => emit('purchase_order.status_changed', { status, order }));
+const statusEvent = (req: Request, id: string, status: string) =>
+  findOrder(req, id).then((order) => emit(order.companyId, 'purchase_order.status_changed', { status, order }));
 
-async function findOrder(id: string) {
-  const order = await prisma.purchaseOrder.findUnique({ where: { id }, include });
+/** Orden de la empresa activa y de una sucursal permitida. */
+async function findOrder(req: Request, id: string) {
+  const order = await prisma.purchaseOrder.findFirst({ where: { id, companyId: tenant(req).companyId, ...(await warehouseFilter(req)) }, include });
   if (!order) throw NotFound('Orden de compra');
   return order;
 }
 
 export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes de compra')
-  .get('/', { summary: 'Listar órdenes de compra', role: 'VIEWER', query: ListQuery, response: paginatedOf(PurchaseOrderOut) }, async ({ query }) => {
+  .get('/', { summary: 'Listar órdenes de compra', role: 'VIEWER', query: ListQuery, response: paginatedOf(PurchaseOrderOut) }, async ({ req, query }) => {
     const where: Prisma.PurchaseOrderWhereInput = {
+      companyId: tenant(req).companyId,
+      ...(await warehouseFilter(req, query.warehouseId)),
+      ...(query.branchId && { warehouse: { branchId: query.branchId } }),
       status: query.status,
       supplierId: query.supplierId,
-      warehouseId: query.warehouseId,
       ...((query.from || query.to) && { createdAt: { gte: query.from, lte: query.to } }),
       ...(query.search && {
         OR: [
@@ -121,13 +128,15 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
     ]);
     return paginated(data, total, query);
   })
-  .get('/:id', { summary: 'Obtener orden de compra', role: 'VIEWER', params: IdParams, response: PurchaseOrderOut }, ({ params }) => findOrder(params.id))
+  .get('/:id', { summary: 'Obtener orden de compra', role: 'VIEWER', params: IdParams, response: PurchaseOrderOut }, ({ req, params }) => findOrder(req, params.id))
   .post('/', { summary: 'Crear orden de compra (borrador)', role: 'MANAGER', body: OrderBody, response: PurchaseOrderOut, status: 201 }, async ({ req, body }) => {
     const id = await inTransaction(async (tx) => {
-      const { items, subtotal, tax, total } = await buildItems(tx, body);
+      const t = tenant(req);
+      const { items, subtotal, tax, total } = await buildItems(tx, t, body);
       const order = await tx.purchaseOrder.create({
         data: {
-          number: await nextNumber(tx, 'purchase_order', 'OC'),
+          companyId: t.companyId,
+          number: await nextNumber(tx, t.companyId, 'purchase_order', 'OC'),
           supplierId: body.supplierId,
           warehouseId: body.warehouseId,
           expectedDate: body.expectedDate,
@@ -142,8 +151,8 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
       return order.id;
     });
     await audit(req, { action: 'CREATE', entity: 'PurchaseOrder', entityId: id, changes: body });
-    const created = await findOrder(id);
-    await emit('purchase_order.created', created);
+    const created = await findOrder(req, id);
+    await emit(created.companyId, 'purchase_order.created', created);
     return created;
   })
   .put(
@@ -151,10 +160,9 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
     { summary: 'Reemplazar orden (solo en borrador)', role: 'MANAGER', params: IdParams, body: OrderBody, response: PurchaseOrderOut },
     async ({ req, params, body }) => {
       await inTransaction(async (tx) => {
-        const order = await tx.purchaseOrder.findUnique({ where: { id: params.id } });
-        if (!order) throw NotFound('Orden de compra');
+        const order = await findOrder(req, params.id);
         if (order.status !== 'DRAFT') throw Conflict('Solo se pueden editar órdenes en borrador');
-        const { items, subtotal, tax, total } = await buildItems(tx, body);
+        const { items, subtotal, tax, total } = await buildItems(tx, tenant(req), body);
         await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: order.id } });
         await tx.purchaseOrder.update({
           where: { id: order.id },
@@ -171,15 +179,15 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
         });
       });
       await audit(req, { action: 'UPDATE', entity: 'PurchaseOrder', entityId: params.id, changes: body });
-      return findOrder(params.id);
+      return findOrder(req, params.id);
     },
   )
   .post('/:id/order', { summary: 'Emitir orden al proveedor', description: 'DRAFT → ORDERED', role: 'MANAGER', params: IdParams, response: PurchaseOrderOut }, async ({ req, params }) => {
-    await findOrder(params.id);
+    await findOrder(req, params.id);
     await transition((a) => prisma.purchaseOrder.updateMany(a), params.id, ['DRAFT'], { status: 'ORDERED', orderedAt: new Date() }, 'emitir');
     await audit(req, { action: 'ORDER', entity: 'PurchaseOrder', entityId: params.id });
-    await statusEvent(params.id, 'ORDERED');
-    return findOrder(params.id);
+    await statusEvent(req, params.id, 'ORDERED');
+    return findOrder(req, params.id);
   })
   .post(
     '/:id/receive',
@@ -194,9 +202,9 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
     async ({ req, params, body }) => {
       await inTransaction(async (tx) => {
         // Bloqueo de la orden para evitar recepciones concurrentes duplicadas
+        await findOrder(req, params.id);
         await tx.$queryRaw`SELECT id FROM purchase_orders WHERE id = ${params.id}::uuid FOR UPDATE`;
-        const order = await tx.purchaseOrder.findUnique({ where: { id: params.id }, include: { items: true } });
-        if (!order) throw NotFound('Orden de compra');
+        const order = await tx.purchaseOrder.findUniqueOrThrow({ where: { id: params.id }, include: { items: true } });
         if (!['ORDERED', 'PARTIALLY_RECEIVED'].includes(order.status)) {
           throw Conflict('Solo se pueden recibir órdenes emitidas o parcialmente recibidas');
         }
@@ -213,6 +221,7 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
           await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQuantity: { increment: r.quantity } } });
           item.receivedQuantity += r.quantity;
           await applyStockChange(tx, {
+            tenant: tenant(req),
             type: 'PURCHASE',
             productId: r.productId,
             warehouseId: order.warehouseId,
@@ -232,22 +241,22 @@ export const purchaseOrdersRouter = new ApiRouter('/purchase-orders', 'Órdenes 
         });
       });
       await audit(req, { action: 'RECEIVE', entity: 'PurchaseOrder', entityId: params.id, changes: body });
-      const order = await findOrder(params.id);
-      await emit('purchase_order.status_changed', { status: order.status, order });
+      const order = await findOrder(req, params.id);
+      await emit(order.companyId, 'purchase_order.status_changed', { status: order.status, order });
       return order;
     },
   )
   .post('/:id/cancel', { summary: 'Cancelar orden', description: 'Solo DRAFT u ORDERED sin recepciones.', role: 'MANAGER', params: IdParams, response: PurchaseOrderOut }, async ({ req, params }) => {
-    await findOrder(params.id);
+    await findOrder(req, params.id);
     await transition((a) => prisma.purchaseOrder.updateMany(a), params.id, ['DRAFT', 'ORDERED'], { status: 'CANCELLED', cancelledAt: new Date() }, 'cancelar');
     await audit(req, { action: 'CANCEL', entity: 'PurchaseOrder', entityId: params.id });
-    await statusEvent(params.id, 'CANCELLED');
-    return findOrder(params.id);
+    await statusEvent(req, params.id, 'CANCELLED');
+    return findOrder(req, params.id);
   })
   .delete('/:id', { summary: 'Eliminar orden en borrador', role: 'MANAGER', params: IdParams }, async ({ req, params }) => {
+    await findOrder(req, params.id);
     const { count } = await prisma.purchaseOrder.deleteMany({ where: { id: params.id, status: 'DRAFT' } });
     if (count === 0) {
-      await findOrder(params.id);
       throw Conflict('Solo se pueden eliminar órdenes en borrador');
     }
     await audit(req, { action: 'DELETE', entity: 'PurchaseOrder', entityId: params.id });

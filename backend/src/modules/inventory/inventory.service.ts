@@ -1,8 +1,11 @@
 import type { MovementType } from '@prisma/client';
 import { prisma, Prisma, type Tx } from '../../lib/prisma.js';
 import { BadRequest, NotFound, Unprocessable } from '../../lib/errors.js';
+import { assertWarehouse, type Tenant } from '../../lib/tenant.js';
 
 export interface StockChange {
+  /** Empresa y alcance de sucursales de quien opera. */
+  tenant: Tenant;
   productId: string;
   warehouseId: string;
   /** Cantidad con signo: positiva = entrada, negativa = salida. */
@@ -27,15 +30,14 @@ export const movementInclude = {
   user: { select: { id: true, name: true } },
 } as const;
 
-async function assertOperable(tx: Tx, productId: string, warehouseId: string) {
-  const [product, warehouse] = await Promise.all([
-    tx.product.findUnique({ where: { id: productId }, select: { id: true, sku: true, isActive: true, deletedAt: true, costPrice: true } }),
-    tx.warehouse.findUnique({ where: { id: warehouseId }, select: { id: true, isActive: true } }),
-  ]);
+async function assertOperable(tx: Tx, t: Tenant, productId: string, warehouseId: string) {
+  const product = await tx.product.findFirst({
+    where: { id: productId, companyId: t.companyId },
+    select: { id: true, sku: true, isActive: true, deletedAt: true, costPrice: true },
+  });
   if (!product || product.deletedAt) throw NotFound(`Producto ${productId}`);
   if (!product.isActive) throw Unprocessable(`El producto ${product.sku} está inactivo`);
-  if (!warehouse) throw NotFound('Almacén');
-  if (!warehouse.isActive) throw Unprocessable('El almacén está inactivo');
+  await assertWarehouse(tx, t, warehouseId);
   return product;
 }
 
@@ -46,7 +48,7 @@ async function assertOperable(tx: Tx, productId: string, warehouseId: string) {
  */
 export async function applyStockChange(tx: Tx, change: StockChange) {
   if (!Number.isInteger(change.delta) || change.delta === 0) throw BadRequest('La cantidad debe ser un entero distinto de cero');
-  const product = await assertOperable(tx, change.productId, change.warehouseId);
+  const product = await assertOperable(tx, change.tenant, change.productId, change.warehouseId);
   const key = { productId: change.productId, warehouseId: change.warehouseId };
 
   if (change.updateAverageCost && change.delta > 0 && change.unitCost != null) {
@@ -99,6 +101,7 @@ export async function applyStockChange(tx: Tx, change: StockChange) {
 
   return tx.stockMovement.create({
     data: {
+      companyId: change.tenant.companyId,
       type: change.type,
       productId: change.productId,
       warehouseId: change.warehouseId,

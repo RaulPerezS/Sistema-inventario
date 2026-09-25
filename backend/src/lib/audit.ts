@@ -18,6 +18,7 @@ export async function audit(req: Request, entry: AuditEntry, tx: Tx = prisma): P
         entity: entry.entity,
         entityId: entry.entityId ?? null,
         changes: entry.changes === undefined ? Prisma.JsonNull : (JSON.parse(JSON.stringify(entry.changes)) as Prisma.InputJsonValue),
+        companyId: req.auth?.companyId ?? null,
         userId: req.auth?.userId ?? null,
         apiKeyId: req.auth?.apiKeyId ?? null,
         ip: req.ip ?? null,

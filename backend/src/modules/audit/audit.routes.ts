@@ -4,6 +4,7 @@ import { prisma, Prisma } from '../../lib/prisma.js';
 import { DateFrom, DateTo } from '../../lib/common-schemas.js';
 import { pageArgs, paginated, PaginationQuery } from '../../lib/pagination.js';
 import { paginatedOf } from '../../docs/registry.js';
+import { tenant } from '../../lib/tenant.js';
 
 const AuditOut = z
   .object({
@@ -22,7 +23,7 @@ const AuditOut = z
 export const auditRouter = new ApiRouter('/audit-logs', 'Auditoría').get(
   '/',
   {
-    summary: 'Bitácora de auditoría',
+    summary: 'Bitácora de auditoría de la empresa',
     role: 'ADMIN',
     query: PaginationQuery.extend({
       entity: z.string().optional(),
@@ -34,8 +35,9 @@ export const auditRouter = new ApiRouter('/audit-logs', 'Auditoría').get(
     }),
     response: paginatedOf(AuditOut),
   },
-  async ({ query }) => {
+  async ({ req, query }) => {
     const where: Prisma.AuditLogWhereInput = {
+      companyId: tenant(req).companyId,
       entity: query.entity,
       entityId: query.entityId,
       action: query.action,

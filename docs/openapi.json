@@ -71,88 +71,198 @@
           "MANAGER",
           "OPERATOR",
           "VIEWER"
-        ]
+        ],
+        "description": "Rol en la empresa activa"
       },
-      "User": {
+      "SessionProfile": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "isSuperAdmin": {
+                "type": "boolean"
+              },
+              "isActive": {
+                "type": "boolean"
+              },
+              "lastLoginAt": {
+                "type": "string",
+                "nullable": true,
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "name",
+              "isSuperAdmin",
+              "isActive",
+              "lastLoginAt"
+            ]
           },
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "name": {
-            "type": "string"
+          "company": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "tradeName": {
+                "type": "string",
+                "nullable": true
+              },
+              "rut": {
+                "type": "string"
+              },
+              "giro": {
+                "type": "string",
+                "nullable": true
+              },
+              "taxRate": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "tradeName",
+              "rut",
+              "giro",
+              "taxRate"
+            ],
+            "description": "Empresa activa"
           },
           "role": {
             "$ref": "#/components/schemas/Role"
           },
-          "isActive": {
-            "type": "boolean"
-          },
-          "lastLoginAt": {
-            "type": "string",
+          "branchIds": {
+            "type": "array",
             "nullable": true,
-            "format": "date-time"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Sucursales permitidas; null = todas"
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "code",
+                "name"
+              ]
+            },
+            "description": "Sucursales accesibles"
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "email",
-          "name",
-          "role",
-          "isActive",
-          "lastLoginAt",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "TokenResponse": {
-        "type": "object",
-        "properties": {
-          "user": {
-            "$ref": "#/components/schemas/User"
-          },
-          "accessToken": {
-            "type": "string"
-          },
-          "refreshToken": {
-            "type": "string",
-            "description": "También se envía como cookie httpOnly"
-          },
-          "refreshTokenExpiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "tokenType": {
-            "type": "string",
-            "enum": [
-              "Bearer"
-            ]
-          },
-          "expiresIn": {
-            "type": "string",
-            "example": "15m"
+          "companies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tradeName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "rut": {
+                  "type": "string"
+                },
+                "role": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "tradeName",
+                "rut",
+                "role"
+              ]
+            },
+            "description": "Empresas a las que puede cambiar"
           }
         },
         "required": [
           "user",
-          "accessToken",
-          "refreshToken",
-          "refreshTokenExpiresAt",
-          "tokenType",
-          "expiresIn"
+          "company",
+          "role",
+          "branchIds",
+          "branches",
+          "companies"
+        ]
+      },
+      "TokenResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SessionProfile"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "accessToken": {
+                "type": "string"
+              },
+              "refreshToken": {
+                "type": "string",
+                "description": "También se envía como cookie httpOnly"
+              },
+              "refreshTokenExpiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "tokenType": {
+                "type": "string",
+                "enum": [
+                  "Bearer"
+                ]
+              },
+              "expiresIn": {
+                "type": "string",
+                "example": "15m"
+              }
+            },
+            "required": [
+              "accessToken",
+              "refreshToken",
+              "refreshTokenExpiresAt",
+              "tokenType",
+              "expiresIn"
+            ]
+          }
         ]
       },
       "LoginRequest": {
@@ -167,6 +277,11 @@
             "type": "string",
             "minLength": 1,
             "example": "Admin123!"
+          },
+          "companyId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Empresa con la que iniciar; por defecto, la primera disponible"
           }
         },
         "required": [
@@ -193,6 +308,56 @@
           "newPassword"
         ]
       },
+      "CompanyUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Sucursales permitidas; vacío = todas"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Acceso activo a esta empresa"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "branchIds",
+          "isActive",
+          "lastLoginAt",
+          "createdAt"
+        ]
+      },
       "PaginationMeta": {
         "type": "object",
         "properties": {
@@ -216,7 +381,7 @@
           "totalPages"
         ]
       },
-      "CreateUser": {
+      "CreateCompanyUser": {
         "type": "object",
         "properties": {
           "email": {
@@ -232,7 +397,8 @@
             "type": "string",
             "minLength": 8,
             "maxLength": 128,
-            "pattern": "[A-Za-z]"
+            "pattern": "[A-Za-z]",
+            "description": "Obligatoria si el usuario no existe todavía en la plataforma"
           },
           "role": {
             "allOf": [
@@ -244,6 +410,14 @@
               }
             ]
           },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": []
+          },
           "isActive": {
             "type": "boolean",
             "default": true
@@ -251,17 +425,13 @@
         },
         "required": [
           "email",
-          "name",
-          "password"
-        ]
+          "name"
+        ],
+        "description": "Si el correo ya existe en la plataforma (p. ej. trabaja en otra empresa), se le da acceso a esta empresa sin cambiar su contraseña."
       },
-      "UpdateUser": {
+      "UpdateCompanyUser": {
         "type": "object",
         "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
           "name": {
             "type": "string",
             "minLength": 2,
@@ -275,6 +445,13 @@
           },
           "role": {
             "$ref": "#/components/schemas/Role"
+          },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "isActive": {
             "type": "boolean"
@@ -297,6 +474,14 @@
           },
           "role": {
             "$ref": "#/components/schemas/Role"
+          },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Sucursales permitidas; vacío = todas"
           },
           "lastUsedAt": {
             "type": "string",
@@ -342,6 +527,7 @@
           "name",
           "prefix",
           "role",
+          "branchIds",
           "lastUsedAt",
           "expiresAt",
           "revokedAt",
@@ -367,6 +553,15 @@
             ],
             "default": "VIEWER",
             "description": "Permisos de la clave (no puede ser ADMIN)"
+          },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": [],
+            "description": "Restringir a estas sucursales (vacío = todas)"
           },
           "expiresAt": {
             "type": "string",
@@ -540,7 +735,7 @@
           },
           "taxId": {
             "type": "string",
-            "description": "RUT chileno. Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
+            "description": "RUT chileno (único por empresa). Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
             "example": "76.123.456-0"
           },
           "email": {
@@ -655,7 +850,7 @@
           },
           "taxId": {
             "type": "string",
-            "description": "RUT chileno. Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
+            "description": "RUT chileno (único por empresa). Acepta \"12.345.678-5\" o \"123456785\"; se almacena como \"12345678-5\".",
             "example": "76.123.456-0"
           },
           "email": {
@@ -720,6 +915,29 @@
           "isActive": {
             "type": "boolean"
           },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branch": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "code",
+              "name"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -735,6 +953,8 @@
           "name",
           "address",
           "isActive",
+          "branchId",
+          "branch",
           "createdAt",
           "updatedAt"
         ]
@@ -742,6 +962,11 @@
       "WarehouseInput": {
         "type": "object",
         "properties": {
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Sucursal a la que pertenece"
+          },
           "code": {
             "type": "string",
             "minLength": 2,
@@ -765,6 +990,7 @@
           }
         },
         "required": [
+          "branchId",
           "code",
           "name"
         ]
@@ -838,12 +1064,32 @@
               },
               "name": {
                 "type": "string"
+              },
+              "branch": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "code",
+                  "name"
+                ]
               }
             },
             "required": [
               "id",
               "code",
-              "name"
+              "name",
+              "branch"
             ]
           }
         },
@@ -1372,12 +1618,32 @@
                         },
                         "name": {
                           "type": "string"
+                        },
+                        "branch": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "code",
+                            "name"
+                          ]
                         }
                       },
                       "required": [
                         "id",
                         "code",
-                        "name"
+                        "name",
+                        "branch"
                       ]
                     }
                   },
@@ -2214,6 +2480,9 @@
               "warehouses": {
                 "type": "number"
               },
+              "branches": {
+                "type": "number"
+              },
               "suppliers": {
                 "type": "number"
               },
@@ -2221,6 +2490,9 @@
                 "type": "number"
               },
               "units": {
+                "type": "number"
+              },
+              "reservedUnits": {
                 "type": "number"
               },
               "inventoryValue": {
@@ -2245,9 +2517,11 @@
             "required": [
               "products",
               "warehouses",
+              "branches",
               "suppliers",
               "customers",
               "units",
+              "reservedUnits",
               "inventoryValue",
               "inventoryRetailValue",
               "lowStock",
@@ -2533,6 +2807,362 @@
           "deliveredAt",
           "createdAt"
         ]
+      },
+      "Company": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rut": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tradeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "giro": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxRate": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "branches": {
+                "type": "number"
+              },
+              "memberships": {
+                "type": "number"
+              },
+              "warehouses": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "branches",
+              "memberships",
+              "warehouses"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "rut",
+          "name",
+          "tradeName",
+          "giro",
+          "address",
+          "city",
+          "phone",
+          "email",
+          "taxRate",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateCompany": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "example": "76.123.456-0"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "Razón social"
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "Nombre de fantasía"
+          },
+          "giro": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "nullable": true,
+                "format": "email"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  ""
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "taxRate": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100,
+            "default": 19,
+            "description": "Tasa de IVA (%)"
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
+          },
+          "branch": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20
+              },
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 120
+              }
+            },
+            "default": {
+              "code": "MATRIZ",
+              "name": "Casa Matriz"
+            },
+            "required": [
+              "code",
+              "name"
+            ],
+            "description": "Primera sucursal (por defecto \"Casa Matriz\")"
+          },
+          "admin": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 120
+              },
+              "password": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128,
+                "pattern": "[A-Za-z]"
+              }
+            },
+            "required": [
+              "email",
+              "name"
+            ],
+            "description": "Administrador inicial de la empresa (si el correo ya existe, se le da acceso)"
+          }
+        },
+        "required": [
+          "rut",
+          "name"
+        ]
+      },
+      "UpdateCurrentCompany": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "Razón social"
+          },
+          "tradeName": {
+            "type": "string",
+            "description": "Nombre de fantasía"
+          },
+          "giro": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "nullable": true,
+                "format": "email"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  ""
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "taxRate": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100,
+            "default": 19,
+            "description": "Tasa de IVA (%)"
+          }
+        }
+      },
+      "Branch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "warehouses": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "warehouses"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "address",
+          "city",
+          "phone",
+          "isActive",
+          "_count",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "BranchInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Z0-9_-]+$",
+            "example": "STGO-CENTRO"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120,
+            "example": "Santiago Centro"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
       }
     },
     "parameters": {}
@@ -2715,15 +3345,87 @@
         "tags": [
           "Autenticación"
         ],
-        "summary": "Perfil del usuario autenticado",
-        "description": "**Rol mínimo:** `VIEWER`",
+        "summary": "Perfil de la sesión",
+        "description": "Usuario, empresa activa, rol, sucursales y empresas disponibles.\n\n**Rol mínimo:** `VIEWER`",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/User"
+                  "$ref": "#/components/schemas/SessionProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/switch-company": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Cambiar de empresa activa",
+        "description": "Emite nuevos tokens para operar con otra empresa a la que el usuario tenga acceso.\n\n**Rol mínimo:** `VIEWER`",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "companyId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "companyId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
                 }
               }
             }
@@ -2819,7 +3521,7 @@
         "tags": [
           "Usuarios"
         ],
-        "summary": "Listar usuarios",
+        "summary": "Listar usuarios de la empresa",
         "description": "**Rol mínimo:** `ADMIN`",
         "parameters": [
           {
@@ -2910,7 +3612,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/User"
+                        "$ref": "#/components/schemas/CompanyUser"
                       }
                     },
                     "meta": {
@@ -2961,13 +3663,13 @@
         "tags": [
           "Usuarios"
         ],
-        "summary": "Crear usuario",
+        "summary": "Agregar usuario a la empresa",
         "description": "**Rol mínimo:** `ADMIN`",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateUser"
+                "$ref": "#/components/schemas/CreateCompanyUser"
               }
             }
           }
@@ -2978,7 +3680,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/User"
+                  "$ref": "#/components/schemas/CompanyUser"
                 }
               }
             }
@@ -3041,7 +3743,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/User"
+                  "$ref": "#/components/schemas/CompanyUser"
                 }
               }
             }
@@ -3100,7 +3802,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateUser"
+                "$ref": "#/components/schemas/UpdateCompanyUser"
               }
             }
           }
@@ -3111,7 +3813,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/User"
+                  "$ref": "#/components/schemas/CompanyUser"
                 }
               }
             }
@@ -3152,8 +3854,8 @@
         "tags": [
           "Usuarios"
         ],
-        "summary": "Desactivar usuario",
-        "description": "Borrado lógico: el usuario queda inactivo y se cierran sus sesiones.\n\n**Rol mínimo:** `ADMIN`",
+        "summary": "Quitar usuario de la empresa",
+        "description": "Elimina su acceso a esta empresa (la cuenta sigue existiendo para otras empresas).\n\n**Rol mínimo:** `ADMIN`",
         "parameters": [
           {
             "schema": {
@@ -4668,6 +5370,15 @@
             "required": false,
             "name": "isActive",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
           }
         ],
         "responses": {
@@ -5079,6 +5790,16 @@
           {
             "schema": {
               "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "uuid"
             },
             "required": false,
@@ -5243,6 +5964,16 @@
           {
             "schema": {
               "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "uuid"
             },
             "required": false,
@@ -5383,6 +6114,16 @@
             },
             "required": false,
             "name": "productId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
             "in": "query"
           },
           {
@@ -6477,6 +7218,16 @@
           {
             "schema": {
               "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "uuid"
             },
             "required": false,
@@ -6657,6 +7408,15 @@
             },
             "required": false,
             "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "branchId",
             "in": "query"
           },
           {
@@ -7273,6 +8033,15 @@
           {
             "schema": {
               "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "date",
               "example": "2026-01-01"
             },
@@ -7791,6 +8560,27 @@
         ],
         "summary": "Indicadores generales del inventario",
         "description": "**Rol mínimo:** `VIEWER`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -7850,6 +8640,16 @@
             },
             "required": false,
             "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
             "in": "query"
           }
         ],
@@ -7953,21 +8753,8 @@
           "Reportes"
         ],
         "summary": "Valorización del inventario",
-        "description": "Agrupa el valor (a costo y a precio de venta) por categoría o por almacén.\n\n**Rol mínimo:** `VIEWER`",
+        "description": "Agrupa el valor (a costo y a precio de venta) por categoría, sucursal o almacén.\n\n**Rol mínimo:** `VIEWER`",
         "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "category",
-                "warehouse"
-              ],
-              "default": "category"
-            },
-            "required": false,
-            "name": "groupBy",
-            "in": "query"
-          },
           {
             "schema": {
               "type": "string",
@@ -7975,6 +8762,30 @@
             },
             "required": false,
             "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "branch",
+                "warehouse"
+              ],
+              "default": "category"
+            },
+            "required": false,
+            "name": "groupBy",
             "in": "query"
           }
         ],
@@ -8061,6 +8872,25 @@
           {
             "schema": {
               "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
               "description": "Por defecto: hace 30 días",
               "format": "date",
               "example": "2026-01-01"
@@ -8078,15 +8908,6 @@
             },
             "required": false,
             "name": "to",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "required": false,
-            "name": "warehouseId",
             "in": "query"
           }
         ],
@@ -8179,8 +9000,27 @@
           "Reportes"
         ],
         "summary": "Productos con mayor salida",
-        "description": "Considera ventas (SALE) y salidas manuales (OUT).\n\n**Rol mínimo:** `VIEWER`",
+        "description": "Considera ventas (SALE) y salidas manuales (OUT). Ingresos en montos netos.\n\n**Rol mínimo:** `VIEWER`",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
           {
             "schema": {
               "type": "string",
@@ -8201,15 +9041,6 @@
             },
             "required": false,
             "name": "to",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "required": false,
-            "name": "warehouseId",
             "in": "query"
           },
           {
@@ -8300,9 +9131,28 @@
         "tags": [
           "Reportes"
         ],
-        "summary": "Ventas despachadas por día (montos netos, sin IVA)",
-        "description": "**Rol mínimo:** `VIEWER`",
+        "summary": "Ventas despachadas por día",
+        "description": "Montos netos (sin IVA); se informa también el IVA débito del periodo.\n\n**Rol mínimo:** `VIEWER`",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "warehouseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Filtrar por sucursal"
+            },
+            "required": false,
+            "name": "branchId",
+            "in": "query"
+          },
           {
             "schema": {
               "type": "string",
@@ -8324,15 +9174,6 @@
             "required": false,
             "name": "to",
             "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "required": false,
-            "name": "warehouseId",
-            "in": "query"
           }
         ],
         "responses": {
@@ -8347,7 +9188,12 @@
                       "type": "number"
                     },
                     "totalRevenue": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Neto"
+                    },
+                    "totalTax": {
+                      "type": "string",
+                      "description": "IVA débito"
                     },
                     "byDay": {
                       "type": "array",
@@ -8375,6 +9221,7 @@
                   "required": [
                     "totalOrders",
                     "totalRevenue",
+                    "totalTax",
                     "byDay"
                   ]
                 }
@@ -8419,7 +9266,7 @@
         "tags": [
           "Auditoría"
         ],
-        "summary": "Bitácora de auditoría",
+        "summary": "Bitácora de auditoría de la empresa",
         "description": "**Rol mínimo:** `ADMIN`",
         "parameters": [
           {
@@ -9242,6 +10089,880 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies": {
+      "get": {
+        "tags": [
+          "Empresas (plataforma)"
+        ],
+        "summary": "Listar empresas",
+        "description": "**Solo administrador de plataforma**",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "description": "Número de página (desde 1)"
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "description": "Elementos por página (máx. 100)"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Texto de búsqueda"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Campo de ordenamiento"
+            },
+            "required": false,
+            "name": "sortBy",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "description": "Dirección del ordenamiento"
+            },
+            "required": false,
+            "name": "sortOrder",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0"
+              ]
+            },
+            "required": false,
+            "name": "isActive",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Company"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Empresas (plataforma)"
+        ],
+        "summary": "Crear empresa",
+        "description": "Crea la empresa, su primera sucursal y (opcionalmente) su administrador.\n\n**Solo administrador de plataforma**",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompany"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies/{id}": {
+      "get": {
+        "tags": [
+          "Empresas (plataforma)"
+        ],
+        "summary": "Obtener empresa",
+        "description": "**Solo administrador de plataforma**",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Empresas (plataforma)"
+        ],
+        "summary": "Actualizar empresa",
+        "description": "**Solo administrador de plataforma**",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rut": {
+                    "type": "string",
+                    "example": "76.123.456-0"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200,
+                    "description": "Razón social"
+                  },
+                  "tradeName": {
+                    "type": "string",
+                    "description": "Nombre de fantasía"
+                  },
+                  "giro": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "nullable": true,
+                        "format": "email"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          ""
+                        ]
+                      },
+                      {
+                        "nullable": true
+                      }
+                    ]
+                  },
+                  "taxRate": {
+                    "type": "number",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "default": 19,
+                    "description": "Tasa de IVA (%)"
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/company": {
+      "get": {
+        "tags": [
+          "Empresa actual"
+        ],
+        "summary": "Datos de la empresa activa",
+        "description": "**Rol mínimo:** `VIEWER`",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Empresa actual"
+        ],
+        "summary": "Actualizar datos de la empresa activa",
+        "description": "El RUT solo lo cambia el administrador de la plataforma.\n\n**Rol mínimo:** `ADMIN`",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCurrentCompany"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/branches": {
+      "get": {
+        "tags": [
+          "Sucursales"
+        ],
+        "summary": "Listar sucursales",
+        "description": "Si el usuario está restringido a ciertas sucursales, solo ve esas.\n\n**Rol mínimo:** `VIEWER`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "description": "Número de página (desde 1)"
+            },
+            "required": false,
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "description": "Elementos por página (máx. 100)"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Texto de búsqueda"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Campo de ordenamiento"
+            },
+            "required": false,
+            "name": "sortBy",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "description": "Dirección del ordenamiento"
+            },
+            "required": false,
+            "name": "sortOrder",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0"
+              ]
+            },
+            "required": false,
+            "name": "isActive",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Branch"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Sucursales"
+        ],
+        "summary": "Crear sucursal",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Branch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/branches/{id}": {
+      "get": {
+        "tags": [
+          "Sucursales"
+        ],
+        "summary": "Obtener sucursal",
+        "description": "**Rol mínimo:** `VIEWER`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Branch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Sucursales"
+        ],
+        "summary": "Actualizar sucursal",
+        "description": "**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Branch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Sucursales"
+        ],
+        "summary": "Eliminar sucursal",
+        "description": "Solo si no tiene almacenes; en otro caso desactívela.\n\n**Rol mínimo:** `ADMIN`",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identificador (UUID)"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sin contenido"
           },
           "400": {
             "description": "Datos inválidos",

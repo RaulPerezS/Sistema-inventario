@@ -8,7 +8,9 @@ import { audit } from '../../lib/audit.js';
 import { nextNumber } from '../../lib/sequence.js';
 import { Conflict, NotFound } from '../../lib/errors.js';
 import { applyStockChange, inTransaction, releaseReservation, reserveStock } from '../inventory/inventory.service.js';
-import { assertActiveRefs, loadOrderProducts, orderTotals, taxRateFor, transition } from '../_shared/orders.js';
+import { assertActiveRefs, companyTaxRate, loadOrderProducts, orderTotals, taxRateFor, transition } from '../_shared/orders.js';
+import { tenant, warehouseFilter, type Tenant } from '../../lib/tenant.js';
+import type { Request } from 'express';
 import { emit, notifyLowStock } from '../../lib/webhooks.js';
 
 const StatusEnum = z.enum(['DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED']).openapi('SalesOrderStatus');
@@ -64,6 +66,7 @@ const ListQuery = PaginationQuery.extend({
   status: StatusEnum.optional(),
   customerId: z.string().uuid().optional(),
   warehouseId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
   from: DateFrom.optional(),
   to: DateTo.optional(),
 });
@@ -75,36 +78,40 @@ const include = {
   items: { include: { product: { select: { id: true, sku: true, name: true, unit: true } } } },
 } as const;
 
-async function findOrder(id: string) {
-  const order = await prisma.salesOrder.findUnique({ where: { id }, include });
+/** Orden de la empresa activa y de una sucursal permitida. */
+async function findOrder(req: Request, id: string) {
+  const order = await prisma.salesOrder.findFirst({ where: { id, companyId: tenant(req).companyId, ...(await warehouseFilter(req)) }, include });
   if (!order) throw NotFound('Orden de venta');
   return order;
 }
 
-async function buildItems(tx: Tx, body: z.infer<typeof OrderBody>) {
-  await assertActiveRefs(tx, { warehouseId: body.warehouseId, customerId: body.customerId });
-  const products = await loadOrderProducts(tx, body.items.map((i) => i.productId));
+async function buildItems(tx: Tx, t: Tenant, body: z.infer<typeof OrderBody>) {
+  await assertActiveRefs(tx, t, { warehouseId: body.warehouseId, customerId: body.customerId });
+  const products = await loadOrderProducts(tx, t.companyId, body.items.map((i) => i.productId));
+  const rate = await companyTaxRate(tx, t.companyId);
   const items = body.items.map((i) => {
     const product = products.get(i.productId)!;
     return {
       productId: i.productId,
       quantity: i.quantity,
       unitPrice: new Prisma.Decimal(i.unitPrice ?? product.salePrice),
-      taxRate: taxRateFor(product),
+      taxRate: taxRateFor(product, rate),
     };
   });
   return { items, ...orderTotals(items.map((i) => ({ quantity: i.quantity, price: i.unitPrice, taxRate: i.taxRate }))) };
 }
 
-const statusEvent = (id: string, status: string) =>
-  findOrder(id).then((order) => emit('sales_order.status_changed', { status, order }));
+const statusEvent = (req: Request, id: string, status: string) =>
+  findOrder(req, id).then((order) => emit(order.companyId, 'sales_order.status_changed', { status, order }));
 
 export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de venta')
-  .get('/', { summary: 'Listar órdenes de venta', role: 'VIEWER', query: ListQuery, response: paginatedOf(SalesOrderOut) }, async ({ query }) => {
+  .get('/', { summary: 'Listar órdenes de venta', role: 'VIEWER', query: ListQuery, response: paginatedOf(SalesOrderOut) }, async ({ req, query }) => {
     const where: Prisma.SalesOrderWhereInput = {
+      companyId: tenant(req).companyId,
+      ...(await warehouseFilter(req, query.warehouseId)),
+      ...(query.branchId && { warehouse: { branchId: query.branchId } }),
       status: query.status,
       customerId: query.customerId,
-      warehouseId: query.warehouseId,
       ...((query.from || query.to) && { createdAt: { gte: query.from, lte: query.to } }),
       ...(query.search && {
         OR: [
@@ -119,13 +126,15 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
     ]);
     return paginated(data, total, query);
   })
-  .get('/:id', { summary: 'Obtener orden de venta', role: 'VIEWER', params: IdParams, response: SalesOrderOut }, ({ params }) => findOrder(params.id))
+  .get('/:id', { summary: 'Obtener orden de venta', role: 'VIEWER', params: IdParams, response: SalesOrderOut }, ({ req, params }) => findOrder(req, params.id))
   .post('/', { summary: 'Crear orden de venta (borrador)', role: 'OPERATOR', body: OrderBody, response: SalesOrderOut, status: 201 }, async ({ req, body }) => {
     const id = await inTransaction(async (tx) => {
-      const { items, subtotal, tax, total } = await buildItems(tx, body);
+      const t = tenant(req);
+      const { items, subtotal, tax, total } = await buildItems(tx, t, body);
       const order = await tx.salesOrder.create({
         data: {
-          number: await nextNumber(tx, 'sales_order', 'OV'),
+          companyId: t.companyId,
+          number: await nextNumber(tx, t.companyId, 'sales_order', 'OV'),
           customerId: body.customerId,
           warehouseId: body.warehouseId,
           notes: body.notes,
@@ -139,8 +148,8 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
       return order.id;
     });
     await audit(req, { action: 'CREATE', entity: 'SalesOrder', entityId: id, changes: body });
-    const created = await findOrder(id);
-    await emit('sales_order.created', created);
+    const created = await findOrder(req, id);
+    await emit(created.companyId, 'sales_order.created', created);
     return created;
   })
   .put(
@@ -148,10 +157,9 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
     { summary: 'Reemplazar orden (solo en borrador)', role: 'OPERATOR', params: IdParams, body: OrderBody, response: SalesOrderOut },
     async ({ req, params, body }) => {
       await inTransaction(async (tx) => {
-        const order = await tx.salesOrder.findUnique({ where: { id: params.id } });
-        if (!order) throw NotFound('Orden de venta');
+        const order = await findOrder(req, params.id);
         if (order.status !== 'DRAFT') throw Conflict('Solo se pueden editar órdenes en borrador');
-        const { items, subtotal, tax, total } = await buildItems(tx, body);
+        const { items, subtotal, tax, total } = await buildItems(tx, tenant(req), body);
         await tx.salesOrderItem.deleteMany({ where: { salesOrderId: order.id } });
         await tx.salesOrder.update({
           where: { id: order.id },
@@ -159,7 +167,7 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
         });
       });
       await audit(req, { action: 'UPDATE', entity: 'SalesOrder', entityId: params.id, changes: body });
-      return findOrder(params.id);
+      return findOrder(req, params.id);
     },
   )
   .post(
@@ -172,25 +180,26 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
       response: SalesOrderOut,
     },
     async ({ req, params }) => {
-      const order = await findOrder(params.id);
+      const order = await findOrder(req, params.id);
       await inTransaction(async (tx) => {
         await transition((a) => tx.salesOrder.updateMany(a), params.id, ['DRAFT'], { status: 'CONFIRMED', confirmedAt: new Date() }, 'confirmar');
         await reserveStock(tx, order.warehouseId, order.items);
       });
       await audit(req, { action: 'CONFIRM', entity: 'SalesOrder', entityId: params.id });
-      await statusEvent(params.id, 'CONFIRMED');
-      return findOrder(params.id);
+      await statusEvent(req, params.id, 'CONFIRMED');
+      return findOrder(req, params.id);
     },
   )
   .post(
     '/:id/fulfill',
     { summary: 'Despachar orden', description: 'Consume la reserva y descuenta el stock (movimientos SALE). CONFIRMED → FULFILLED', role: 'OPERATOR', params: IdParams, response: SalesOrderOut },
     async ({ req, params }) => {
-      const order = await findOrder(params.id);
+      const order = await findOrder(req, params.id);
       await inTransaction(async (tx) => {
         await transition((a) => tx.salesOrder.updateMany(a), params.id, ['CONFIRMED'], { status: 'FULFILLED', fulfilledAt: new Date() }, 'despachar');
         for (const item of order.items) {
           await applyStockChange(tx, {
+            tenant: tenant(req),
             type: 'SALE',
             productId: item.productId,
             warehouseId: order.warehouseId,
@@ -203,13 +212,13 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
         }
       });
       await audit(req, { action: 'FULFILL', entity: 'SalesOrder', entityId: params.id });
-      await statusEvent(params.id, 'FULFILLED');
-      await notifyLowStock(order.items.map((i) => i.productId));
-      return findOrder(params.id);
+      await statusEvent(req, params.id, 'FULFILLED');
+      await notifyLowStock(order.companyId, order.items.map((i) => i.productId));
+      return findOrder(req, params.id);
     },
   )
   .post('/:id/cancel', { summary: 'Cancelar orden', description: 'Solo DRAFT o CONFIRMED. Si estaba confirmada, libera la reserva.', role: 'OPERATOR', params: IdParams, response: SalesOrderOut }, async ({ req, params }) => {
-    const order = await findOrder(params.id);
+    const order = await findOrder(req, params.id);
     await inTransaction(async (tx) => {
       // Bloquea la orden para conocer su estado real antes de cancelar
       const [locked] = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM sales_orders WHERE id = ${params.id}::uuid FOR UPDATE`;
@@ -217,13 +226,13 @@ export const salesOrdersRouter = new ApiRouter('/sales-orders', 'Órdenes de ven
       if (locked?.status === 'CONFIRMED') await releaseReservation(tx, order.warehouseId, order.items);
     });
     await audit(req, { action: 'CANCEL', entity: 'SalesOrder', entityId: params.id });
-    await statusEvent(params.id, 'CANCELLED');
-    return findOrder(params.id);
+    await statusEvent(req, params.id, 'CANCELLED');
+    return findOrder(req, params.id);
   })
   .delete('/:id', { summary: 'Eliminar orden en borrador', role: 'MANAGER', params: IdParams }, async ({ req, params }) => {
+    await findOrder(req, params.id);
     const { count } = await prisma.salesOrder.deleteMany({ where: { id: params.id, status: 'DRAFT' } });
     if (count === 0) {
-      await findOrder(params.id);
       throw Conflict('Solo se pueden eliminar órdenes en borrador');
     }
     await audit(req, { action: 'DELETE', entity: 'SalesOrder', entityId: params.id });

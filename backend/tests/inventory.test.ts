@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Role } from '@prisma/client';
 import { api, auth, prisma, resetDb, setupUsers } from './helpers.js';
 
 describe('Catálogo, stock y órdenes', () => {
-  let t: Record<Role, string>;
+  let t: Awaited<ReturnType<typeof setupUsers>>;
   let central: string;
   let norte: string;
   let productId: string;
@@ -12,8 +11,8 @@ describe('Catálogo, stock y órdenes', () => {
   beforeAll(async () => {
     await resetDb();
     t = await setupUsers();
-    central = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'central', name: 'Central' })).body.id;
-    norte = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'NORTE', name: 'Norte' })).body.id;
+    central = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'central', name: 'Central', branchId: t.company.branchId })).body.id;
+    norte = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'NORTE', name: 'Norte', branchId: t.company.branchId })).body.id;
     supplierId = (await api().post('/api/v1/suppliers').set(auth(t.MANAGER)).send({ name: 'Proveedor Uno', taxId: '76.123.456-0' })).body.id;
   });
   afterAll(() => prisma.$disconnect());
@@ -21,7 +20,7 @@ describe('Catálogo, stock y órdenes', () => {
   it('normaliza el código de almacén y evita duplicados', async () => {
     const list = await api().get('/api/v1/warehouses').set(auth(t.VIEWER));
     expect(list.body.data.map((w: { code: string }) => w.code)).toEqual(['CENTRAL', 'NORTE']);
-    const dup = await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'CENTRAL', name: 'Otro' });
+    const dup = await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'CENTRAL', name: 'Otro', branchId: t.company.branchId });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('DUPLICATE');
   });

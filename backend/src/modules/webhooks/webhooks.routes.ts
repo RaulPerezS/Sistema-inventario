@@ -8,6 +8,8 @@ import { randomToken } from '../../lib/crypto.js';
 import { audit } from '../../lib/audit.js';
 import { NotFound } from '../../lib/errors.js';
 import { emit, WEBHOOK_EVENTS } from '../../lib/webhooks.js';
+import { tenant } from '../../lib/tenant.js';
+import type { Request } from 'express';
 
 const EventEnum = z.enum(['*', ...WEBHOOK_EVENTS]).openapi('WebhookEvent');
 
@@ -63,8 +65,8 @@ async function withStats<T extends { id: string }>(hooks: T[]) {
   });
 }
 
-async function findHook(id: string) {
-  const hook = await prisma.webhook.findUnique({ where: { id }, select });
+async function findHook(req: Request, id: string) {
+  const hook = await prisma.webhook.findFirst({ where: { id, companyId: tenant(req).companyId }, select });
   if (!hook) throw NotFound('Webhook');
   return (await withStats([hook]))[0]!;
 }
@@ -78,10 +80,10 @@ const SIGNATURE_DOC = [
 
 export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
   .get('/events', { summary: 'Eventos disponibles', role: 'ADMIN', response: z.array(z.string()) }, () => [...WEBHOOK_EVENTS])
-  .get('/', { summary: 'Listar webhooks', description: SIGNATURE_DOC, role: 'ADMIN', response: z.array(WebhookOut) }, async () =>
-    withStats(await prisma.webhook.findMany({ select, orderBy: { createdAt: 'desc' } })),
+  .get('/', { summary: 'Listar webhooks', description: SIGNATURE_DOC, role: 'ADMIN', response: z.array(WebhookOut) }, async ({ req }) =>
+    withStats(await prisma.webhook.findMany({ where: { companyId: tenant(req).companyId }, select, orderBy: { createdAt: 'desc' } })),
   )
-  .get('/:id', { summary: 'Obtener webhook', role: 'ADMIN', params: IdParams, response: WebhookOut }, ({ params }) => findHook(params.id))
+  .get('/:id', { summary: 'Obtener webhook', role: 'ADMIN', params: IdParams, response: WebhookOut }, ({ req, params }) => findHook(req, params.id))
   .post(
     '/',
     {
@@ -94,17 +96,19 @@ export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
     },
     async ({ req, body }) => {
       const secret = `whsec_${randomToken(24)}`;
-      const hook = await prisma.webhook.create({ data: { ...body, secret, createdById: req.auth?.userId }, select });
+      const hook = await prisma.webhook.create({ data: { ...body, secret, companyId: tenant(req).companyId, createdById: req.auth?.userId }, select });
       await audit(req, { action: 'CREATE', entity: 'Webhook', entityId: hook.id, changes: body });
-      return { ...(await findHook(hook.id)), secret };
+      return { ...(await findHook(req, hook.id)), secret };
     },
   )
   .patch('/:id', { summary: 'Actualizar webhook', role: 'ADMIN', params: IdParams, body: WebhookBody.partial(), response: WebhookOut }, async ({ req, params, body }) => {
+    await findHook(req, params.id);
     await prisma.webhook.update({ where: { id: params.id }, data: body });
     await audit(req, { action: 'UPDATE', entity: 'Webhook', entityId: params.id, changes: body });
-    return findHook(params.id);
+    return findHook(req, params.id);
   })
   .delete('/:id', { summary: 'Eliminar webhook', role: 'ADMIN', params: IdParams }, async ({ req, params }) => {
+    await findHook(req, params.id);
     await prisma.webhook.delete({ where: { id: params.id } });
     await audit(req, { action: 'DELETE', entity: 'Webhook', entityId: params.id });
   })
@@ -112,6 +116,7 @@ export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
     '/:id/rotate-secret',
     { summary: 'Regenerar el secreto de firma', role: 'ADMIN', params: IdParams, response: z.object({ secret: z.string() }) },
     async ({ req, params }) => {
+      await findHook(req, params.id);
       const secret = `whsec_${randomToken(24)}`;
       await prisma.webhook.update({ where: { id: params.id }, data: { secret } });
       await audit(req, { action: 'ROTATE_SECRET', entity: 'Webhook', entityId: params.id });
@@ -121,9 +126,10 @@ export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
   .post(
     '/:id/test',
     { summary: 'Enviar un evento de prueba', description: 'Encola un evento `webhook.test` solo para este webhook.', role: 'ADMIN', params: IdParams, status: 202, response: z.object({ queued: z.boolean() }) },
-    async ({ params }) => {
-      await findHook(params.id);
-      await emit('webhook.test', { message: 'Evento de prueba del Sistema de Inventario', sentAt: new Date().toISOString() }, params.id);
+    async ({ req, params }) => {
+      const { companyId } = tenant(req);
+      await findHook(req, params.id);
+      await emit(companyId, 'webhook.test', { message: 'Evento de prueba del Sistema de Inventario', sentAt: new Date().toISOString() }, params.id);
       return { queued: true };
     },
   )
@@ -136,7 +142,8 @@ export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
       query: PaginationQuery.pick({ page: true, limit: true }).extend({ status: z.enum(['PENDING', 'SUCCESS', 'FAILED']).optional() }),
       response: paginatedOf(DeliveryOut),
     },
-    async ({ params, query }) => {
+    async ({ req, params, query }) => {
+      await findHook(req, params.id);
       const where: Prisma.WebhookDeliveryWhereInput = { webhookId: params.id, status: query.status };
       const [data, total] = await Promise.all([
         prisma.webhookDelivery.findMany({ where, orderBy: { createdAt: 'desc' }, ...pageArgs(query) }),
@@ -149,6 +156,8 @@ export const webhooksRouter = new ApiRouter('/webhooks', 'Webhooks')
     '/deliveries/:id/retry',
     { summary: 'Reintentar un envío', role: 'ADMIN', params: IdParams, response: DeliveryOut },
     async ({ req, params }) => {
+      const owned = await prisma.webhookDelivery.findFirst({ where: { id: params.id, webhook: { companyId: tenant(req).companyId } } });
+      if (!owned) throw NotFound('Envío');
       const delivery = await prisma.webhookDelivery.update({
         where: { id: params.id },
         data: { status: 'PENDING', attempts: 0, nextAttemptAt: new Date(), error: null },

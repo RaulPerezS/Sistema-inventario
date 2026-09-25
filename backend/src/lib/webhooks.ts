@@ -31,10 +31,12 @@ const toJson = (data: unknown) => JSON.parse(JSON.stringify(data)) as Prisma.Inp
  * Encola el evento para cada webhook activo suscrito. Debe llamarse después de confirmar
  * la transacción para no notificar cambios que finalmente se revirtieron. Nunca lanza.
  */
-export async function emit(event: WebhookEvent, data: unknown, onlyWebhookId?: string): Promise<void> {
+export async function emit(companyId: string, event: WebhookEvent, data: unknown, onlyWebhookId?: string): Promise<void> {
   try {
     const hooks = await prisma.webhook.findMany({
-      where: onlyWebhookId ? { id: onlyWebhookId } : { isActive: true, OR: [{ events: { has: event } }, { events: { has: '*' } }] },
+      where: onlyWebhookId
+        ? { id: onlyWebhookId, companyId }
+        : { companyId, isActive: true, OR: [{ events: { has: event } }, { events: { has: '*' } }] },
       select: { id: true },
     });
     if (hooks.length === 0) return;
@@ -53,7 +55,7 @@ async function deliver(id: string) {
   if (!d || d.status !== 'PENDING') return;
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const body = JSON.stringify({ id: d.id, event: d.event, createdAt: d.createdAt.toISOString(), data: d.payload });
+  const body = JSON.stringify({ id: d.id, event: d.event, companyId: d.webhook.companyId, createdAt: d.createdAt.toISOString(), data: d.payload });
   const attempts = d.attempts + 1;
   let responseStatus: number | null = null;
   let error: string | null = null;
@@ -143,16 +145,16 @@ export function stopWebhookWorker() {
 }
 
 /** Tras movimientos de salida, notifica los productos que quedaron en o bajo su mínimo. */
-export async function notifyLowStock(productIds: string[]) {
+export async function notifyLowStock(companyId: string, productIds: string[]) {
   if (productIds.length === 0) return;
   try {
     const rows = await prisma.$queryRaw<{ id: string; sku: string; name: string; minStock: number; total: bigint }[]>`
       SELECT p.id, p.sku, p.name, p."minStock", COALESCE(SUM(s.quantity), 0) AS total
       FROM products p LEFT JOIN stocks s ON s."productId" = p.id
-      WHERE p.id IN (${Prisma.join(productIds.map((id) => Prisma.sql`${id}::uuid`))}) AND p."deletedAt" IS NULL
+      WHERE p."companyId" = ${companyId}::uuid AND p.id IN (${Prisma.join(productIds.map((id) => Prisma.sql`${id}::uuid`))}) AND p."deletedAt" IS NULL
       GROUP BY p.id HAVING COALESCE(SUM(s.quantity), 0) <= p."minStock"`;
     for (const r of rows) {
-      await emit('inventory.low_stock', { productId: r.id, sku: r.sku, name: r.name, minStock: r.minStock, totalStock: Number(r.total) });
+      await emit(companyId, 'inventory.low_stock', { productId: r.id, sku: r.sku, name: r.name, minStock: r.minStock, totalStock: Number(r.total) });
     }
   } catch (err) {
     logger.error({ err }, 'No se pudo evaluar stock bajo');

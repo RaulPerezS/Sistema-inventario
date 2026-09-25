@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { api, auth, createUser, PASSWORD, prisma, resetDb } from './helpers.js';
+import { api, auth, createCompany, createUser, PASSWORD, prisma, resetDb } from './helpers.js';
 
 describe('Autenticación', () => {
   beforeAll(async () => {
     await resetDb();
-    await createUser('ADMIN', 'admin@test.local');
+    await createUser('ADMIN', 'admin@test.local', await createCompany());
   });
   afterAll(() => prisma.$disconnect());
 
@@ -28,7 +28,9 @@ describe('Autenticación', () => {
 
     const me = await api().get('/api/v1/auth/me').set(auth(login.body.accessToken));
     expect(me.status).toBe(200);
-    expect(me.body.email).toBe('admin@test.local');
+    expect(me.body.user.email).toBe('admin@test.local');
+    expect(me.body.role).toBe('ADMIN');
+    expect(me.body.company).not.toBeNull();
 
     const refreshed = await api().post('/api/v1/auth/refresh').send({ refreshToken: login.body.refreshToken });
     expect(refreshed.status).toBe(200);

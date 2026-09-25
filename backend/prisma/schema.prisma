@@ -22,12 +22,13 @@ model User {
   email        String    @unique
   name         String
   passwordHash String
-  role         Role      @default(VIEWER)
+  isSuperAdmin Boolean   @default(false) // Administrador de la plataforma (gestiona empresas)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  memberships    Membership[]
   refreshTokens  RefreshToken[]
   apiKeys        ApiKey[]
   webhooks       Webhook[]
@@ -44,6 +45,7 @@ model RefreshToken {
   tokenHash String    @unique
   userId    String    @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String?   @db.Uuid // Empresa activa de la sesión
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -59,6 +61,9 @@ model ApiKey {
   name        String
   prefix      String    @unique
   keyHash     String    @unique
+  companyId   String    @db.Uuid
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchIds   String[]  @db.Uuid // Vacío = todas las sucursales
   role        Role      @default(VIEWER)
   createdById String    @db.Uuid
   createdBy   User      @relation(fields: [createdById], references: [id])
@@ -74,6 +79,8 @@ model ApiKey {
 
 model AuditLog {
   id        String   @id @default(uuid()) @db.Uuid
+  companyId String?  @db.Uuid // Nulo para acciones de plataforma
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String?  @db.Uuid
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   apiKeyId  String?  @db.Uuid
@@ -85,16 +92,89 @@ model AuditLog {
   ip        String?
   createdAt DateTime @default(now())
 
+  @@index([companyId, createdAt])
   @@index([entity, entityId])
-  @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ─────────────────────────────── Multiempresa ───────────────────────────────
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  rut       String   @unique
+  name      String // Razón social
+  tradeName String? // Nombre de fantasía
+  giro      String?
+  address   String?
+  city      String?
+  phone     String?
+  email     String?
+  taxRate   Decimal  @default(19) @db.Decimal(5, 2) // IVA aplicable
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches       Branch[]
+  memberships    Membership[]
+  apiKeys        ApiKey[]
+  auditLogs      AuditLog[]
+  categories     Category[]
+  suppliers      Supplier[]
+  customers      Customer[]
+  warehouses     Warehouse[]
+  products       Product[]
+  movements      StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  salesOrders    SalesOrder[]
+  webhooks       Webhook[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  address   String?
+  city      String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  warehouses Warehouse[]
+
+  @@unique([companyId, code])
+  @@map("branches")
+}
+
+/// Acceso de un usuario a una empresa, con su rol y (opcionalmente) sucursales permitidas.
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String   @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      Role     @default(VIEWER)
+  branchIds String[] @db.Uuid // Vacío = todas las sucursales
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@map("memberships")
 }
 
 // ─────────────────────────────── Catálogo ───────────────────────────────
 
 model Category {
   id          String     @id @default(uuid()) @db.Uuid
-  name        String     @unique
+  companyId   String     @db.Uuid
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
   description String?
   parentId    String?    @db.Uuid
   parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
@@ -103,13 +183,16 @@ model Category {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  @@unique([companyId, name])
   @@map("categories")
 }
 
 model Supplier {
   id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @db.Uuid
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
-  taxId       String?  @unique
+  taxId       String?
   contactName String?
   email       String?
   phone       String?
@@ -122,13 +205,16 @@ model Supplier {
   products       Product[]
   purchaseOrders PurchaseOrder[]
 
+  @@unique([companyId, taxId])
   @@map("suppliers")
 }
 
 model Customer {
   id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name      String
-  taxId     String?  @unique
+  taxId     String?
   email     String?
   phone     String?
   address   String?
@@ -139,12 +225,17 @@ model Customer {
 
   salesOrders SalesOrder[]
 
+  @@unique([companyId, taxId])
   @@map("customers")
 }
 
 model Warehouse {
   id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique
+  companyId String   @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String   @db.Uuid
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  code      String
   name      String
   address   String?
   isActive  Boolean  @default(true)
@@ -156,13 +247,17 @@ model Warehouse {
   purchaseOrders PurchaseOrder[]
   salesOrders    SalesOrder[]
 
+  @@unique([companyId, code])
+  @@index([branchId])
   @@map("warehouses")
 }
 
 model Product {
   id          String    @id @default(uuid()) @db.Uuid
-  sku         String    @unique
-  barcode     String?   @unique
+  companyId   String    @db.Uuid
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sku         String
+  barcode     String?
   name        String
   description String?
   unit        String    @default("UND")
@@ -185,7 +280,9 @@ model Product {
   purchaseOrderItems PurchaseOrderItem[]
   salesOrderItems    SalesOrderItem[]
 
-  @@index([name])
+  @@unique([companyId, sku])
+  @@unique([companyId, barcode])
+  @@index([companyId, name])
   @@index([categoryId])
   @@map("products")
 }
@@ -217,6 +314,8 @@ enum MovementType {
 
 model StockMovement {
   id              String         @id @default(uuid()) @db.Uuid
+  companyId       String         @db.Uuid
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   type            MovementType
   productId       String         @db.Uuid
   product         Product        @relation(fields: [productId], references: [id])
@@ -236,6 +335,7 @@ model StockMovement {
   user            User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt       DateTime       @default(now())
 
+  @@index([companyId, createdAt])
   @@index([productId, createdAt])
   @@index([warehouseId, createdAt])
   @@index([type])
@@ -261,7 +361,9 @@ enum PurchaseOrderStatus {
 
 model PurchaseOrder {
   id           String              @id @default(uuid()) @db.Uuid
-  number       String              @unique
+  companyId    String              @db.Uuid
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  number       String
   supplierId   String              @db.Uuid
   supplier     Supplier            @relation(fields: [supplierId], references: [id])
   warehouseId  String              @db.Uuid
@@ -283,7 +385,8 @@ model PurchaseOrder {
   items     PurchaseOrderItem[]
   movements StockMovement[]
 
-  @@index([status])
+  @@unique([companyId, number])
+  @@index([companyId, status])
   @@map("purchase_orders")
 }
 
@@ -311,7 +414,9 @@ enum SalesOrderStatus {
 
 model SalesOrder {
   id          String           @id @default(uuid()) @db.Uuid
-  number      String           @unique
+  companyId   String           @db.Uuid
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  number      String
   customerId  String?          @db.Uuid
   customer    Customer?        @relation(fields: [customerId], references: [id])
   warehouseId String           @db.Uuid
@@ -332,7 +437,8 @@ model SalesOrder {
   items     SalesOrderItem[]
   movements StockMovement[]
 
-  @@index([status])
+  @@unique([companyId, number])
+  @@index([companyId, status])
   @@map("sales_orders")
 }
 
@@ -354,6 +460,8 @@ model SalesOrderItem {
 
 model Webhook {
   id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @db.Uuid
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
   url         String
   secret      String // Clave para firmar (HMAC-SHA256) cada envío

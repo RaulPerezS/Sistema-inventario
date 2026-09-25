@@ -1,11 +1,12 @@
 import { Prisma, type Tx } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
+import { assertWarehouse, type Tenant } from '../../lib/tenant.js';
 import { BadRequest, Conflict, NotFound, Unprocessable } from '../../lib/errors.js';
 
 /** Valida que los productos existan, estén activos y no se repitan. */
-export async function loadOrderProducts(tx: Tx, productIds: string[]) {
+export async function loadOrderProducts(tx: Tx, companyId: string, productIds: string[]) {
   if (new Set(productIds).size !== productIds.length) throw BadRequest('Hay productos repetidos en la orden');
-  const products = await tx.product.findMany({ where: { id: { in: productIds }, deletedAt: null } });
+  const products = await tx.product.findMany({ where: { id: { in: productIds }, companyId, deletedAt: null } });
   const map = new Map(products.map((p) => [p.id, p]));
   const missing = productIds.filter((id) => !map.has(id));
   if (missing.length) throw NotFound(`Producto(s) ${missing.join(', ')}`);
@@ -43,22 +44,25 @@ export function orderTotals(lines: TaxedLine[]) {
   return { subtotal, tax, total: subtotal.add(tax) };
 }
 
-/** Tasa de IVA aplicable a un producto. */
-export const taxRateFor = (product: { taxExempt: boolean }) => new Prisma.Decimal(product.taxExempt ? 0 : env.TAX_RATE);
+/** Tasa de IVA aplicable a un producto según la tasa configurada en su empresa. */
+export const taxRateFor = (product: { taxExempt: boolean }, companyRate: Prisma.Decimal | number) =>
+  new Prisma.Decimal(product.taxExempt ? 0 : companyRate);
 
-export async function assertActiveRefs(tx: Tx, refs: { warehouseId?: string; supplierId?: string; customerId?: string | null }) {
-  if (refs.warehouseId) {
-    const w = await tx.warehouse.findUnique({ where: { id: refs.warehouseId } });
-    if (!w) throw NotFound('Almacén');
-    if (!w.isActive) throw Unprocessable('El almacén está inactivo');
-  }
+/** Tasa de IVA de la empresa (por defecto la global TAX_RATE). */
+export async function companyTaxRate(tx: Tx, companyId: string) {
+  const company = await tx.company.findUnique({ where: { id: companyId }, select: { taxRate: true } });
+  return company?.taxRate ?? new Prisma.Decimal(env.TAX_RATE);
+}
+
+export async function assertActiveRefs(tx: Tx, t: Tenant, refs: { warehouseId?: string; supplierId?: string; customerId?: string | null }) {
+  if (refs.warehouseId) await assertWarehouse(tx, t, refs.warehouseId);
   if (refs.supplierId) {
-    const s = await tx.supplier.findUnique({ where: { id: refs.supplierId } });
+    const s = await tx.supplier.findFirst({ where: { id: refs.supplierId, companyId: t.companyId } });
     if (!s) throw NotFound('Proveedor');
     if (!s.isActive) throw Unprocessable('El proveedor está inactivo');
   }
   if (refs.customerId) {
-    const c = await tx.customer.findUnique({ where: { id: refs.customerId } });
+    const c = await tx.customer.findFirst({ where: { id: refs.customerId, companyId: t.companyId } });
     if (!c) throw NotFound('Cliente');
     if (!c.isActive) throw Unprocessable('El cliente está inactivo');
   }

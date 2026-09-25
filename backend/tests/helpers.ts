@@ -9,6 +9,7 @@ export const api = () => request(app);
 export { prisma };
 
 const TABLES = [
+  'webhook_deliveries', 'webhooks', 'memberships', 'branches', 'companies',
   'audit_logs', 'stock_movements', 'sales_order_items', 'sales_orders', 'purchase_order_items', 'purchase_orders',
   'stocks', 'products', 'categories', 'suppliers', 'customers', 'warehouses', 'api_keys', 'refresh_tokens', 'users', 'sequences',
 ];
@@ -19,25 +20,46 @@ export async function resetDb() {
 
 export const PASSWORD = 'Secret123!';
 
-export async function createUser(role: Role, email = `${role.toLowerCase()}@test.local`) {
-  return prisma.user.create({ data: { email, name: `Usuario ${role}`, role, passwordHash: await hashPassword(PASSWORD) } });
+export interface TestCompany {
+  companyId: string;
+  branchId: string;
 }
 
-export async function login(email: string) {
-  const res = await api().post('/api/v1/auth/login').send({ email, password: PASSWORD });
+let seq = 0;
+/** Crea una empresa con su sucursal principal. */
+export async function createCompany(name = 'Empresa Test'): Promise<TestCompany> {
+  seq++;
+  const company = await prisma.company.create({ data: { name, rut: `${1000000 + seq}-${seq % 10}` } });
+  const branch = await prisma.branch.create({ data: { companyId: company.id, code: 'MATRIZ', name: 'Casa Matriz' } });
+  return { companyId: company.id, branchId: branch.id };
+}
+
+export async function createUser(role: Role, email = `${role.toLowerCase()}@test.local`, company?: TestCompany, branchIds: string[] = []) {
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: {},
+    create: { email, name: `Usuario ${role}`, passwordHash: await hashPassword(PASSWORD) },
+  });
+  if (company) await prisma.membership.create({ data: { userId: user.id, companyId: company.companyId, role, branchIds } });
+  return user;
+}
+
+export async function login(email: string, companyId?: string) {
+  const res = await api().post('/api/v1/auth/login').send({ email, password: PASSWORD, companyId });
   if (res.status !== 200) throw new Error(`Login falló: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body.accessToken as string;
 }
 
-/** Crea usuarios de todos los roles y devuelve sus tokens. */
-export async function setupUsers() {
+/** Crea una empresa y usuarios de todos los roles en ella; devuelve sus tokens. */
+export async function setupUsers(company?: TestCompany, suffix = '') {
+  const c = company ?? (await createCompany());
   const roles: Role[] = ['ADMIN', 'MANAGER', 'OPERATOR', 'VIEWER'];
   const tokens = {} as Record<Role, string>;
   for (const role of roles) {
-    const user = await createUser(role);
-    tokens[role] = await login(user.email);
+    const user = await createUser(role, `${role.toLowerCase()}${suffix}@test.local`, c);
+    tokens[role] = await login(user.email, c.companyId);
   }
-  return tokens;
+  return Object.assign(tokens, { company: c });
 }
 
 export const auth = (token: string) => ({ Authorization: `Bearer ${token}` });

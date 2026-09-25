@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Role } from '@prisma/client';
 import { api, auth, prisma, resetDb, setupUsers } from './helpers.js';
 
 describe('Roles, permisos y API keys', () => {
-  let tokens: Record<Role, string>;
+  let tokens: Awaited<ReturnType<typeof setupUsers>>;
   beforeAll(async () => {
     await resetDb();
     tokens = await setupUsers();
@@ -12,7 +11,7 @@ describe('Roles, permisos y API keys', () => {
 
   it('VIEWER puede leer pero no crear', async () => {
     expect((await api().get('/api/v1/warehouses').set(auth(tokens.VIEWER))).status).toBe(200);
-    const res = await api().post('/api/v1/warehouses').set(auth(tokens.VIEWER)).send({ code: 'X1', name: 'X' });
+    const res = await api().post('/api/v1/warehouses').set(auth(tokens.VIEWER)).send({ code: 'X1', name: 'X', branchId: tokens.company.branchId });
     expect(res.status).toBe(403);
   });
 
@@ -25,8 +24,9 @@ describe('Roles, permisos y API keys', () => {
 
   it('ADMIN no puede quitarse su propio rol', async () => {
     const me = await api().get('/api/v1/auth/me').set(auth(tokens.ADMIN));
-    const res = await api().patch(`/api/v1/users/${me.body.id}`).set(auth(tokens.ADMIN)).send({ role: 'VIEWER' });
+    const res = await api().patch(`/api/v1/users/${me.body.user.id}`).set(auth(tokens.ADMIN)).send({ role: 'VIEWER' });
     expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/a sí mismo/);
   });
 
   it('crea una API key, la usa y la revoca', async () => {

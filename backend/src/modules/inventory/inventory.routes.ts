@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
+import { tenant, warehouseFilter } from '../../lib/tenant.js';
 import { z } from '../../docs/zod.js';
 import { ApiRouter } from '../../lib/router.js';
 import { prisma, Prisma } from '../../lib/prisma.js';
@@ -22,10 +23,13 @@ import {
 
 const MovementsResult = z.object({ movements: z.array(MovementOut) }).openapi('MovementsResult');
 
-export function movementsWhere(q: z.infer<typeof MovementsQuery>): Prisma.StockMovementWhereInput {
+/** Filtro de movimientos: siempre acotado a la empresa y a las sucursales permitidas. */
+export async function movementsWhere(req: Request, q: z.infer<typeof MovementsQuery>): Promise<Prisma.StockMovementWhereInput> {
   return {
+    companyId: tenant(req).companyId,
+    ...(await warehouseFilter(req, q.warehouseId)),
+    ...(q.branchId && { warehouse: { branchId: q.branchId } }),
     productId: q.productId,
-    warehouseId: q.warehouseId,
     type: q.type,
     ...((q.from || q.to) && { createdAt: { gte: q.from, lte: q.to } }),
     ...(q.search && {
@@ -45,12 +49,14 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
   .get(
     '/stock',
     { summary: 'Existencias por producto y almacén', role: 'VIEWER', query: StockQuery, response: paginatedOf(StockOut) },
-    async ({ query }) => {
+    async ({ req, query }) => {
       const where: Prisma.StockWhereInput = {
-        warehouseId: query.warehouseId,
+        ...(await warehouseFilter(req, query.warehouseId)),
+        warehouse: { companyId: tenant(req).companyId, branchId: query.branchId },
         productId: query.productId,
         ...(query.onlyAvailable && { quantity: { gt: 0 } }),
         product: {
+          companyId: tenant(req).companyId,
           deletedAt: null,
           categoryId: query.categoryId,
           ...(query.search && {
@@ -67,7 +73,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
           where,
           include: {
             product: { select: { id: true, sku: true, name: true, unit: true, minStock: true, costPrice: true } },
-            warehouse: { select: { id: true, code: true, name: true } },
+            warehouse: { select: { id: true, code: true, name: true, branch: { select: { id: true, code: true, name: true } } } },
           },
           orderBy: orderArgs(query, ['quantity', 'updatedAt'], 'updatedAt'),
           ...pageArgs(query),
@@ -84,8 +90,8 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
   .get(
     '/movements',
     { summary: 'Historial de movimientos (kardex)', role: 'VIEWER', query: MovementsQuery, response: paginatedOf(MovementOut) },
-    async ({ query }) => {
-      const where = movementsWhere(query);
+    async ({ req, query }) => {
+      const where = await movementsWhere(req, query);
       const [data, total] = await Promise.all([
         prisma.stockMovement.findMany({ where, include: movementInclude, orderBy: orderArgs(query, ['createdAt', 'quantity'], 'createdAt'), ...pageArgs(query) }),
         prisma.stockMovement.count({ where }),
@@ -96,9 +102,9 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
   .get(
     '/movements/export',
     { summary: 'Exportar movimientos a CSV', description: 'Máximo 50.000 filas.', role: 'VIEWER', query: MovementsQuery.omit({ page: true, limit: true }), produces: 'text/csv' },
-    async ({ query, res }) => {
+    async ({ req, query, res }) => {
       const rows = await prisma.stockMovement.findMany({
-        where: movementsWhere({ ...query, page: 1, limit: 1 }),
+        where: await movementsWhere(req, { ...query, page: 1, limit: 1 }),
         include: movementInclude,
         orderBy: { createdAt: 'desc' },
         take: 50_000,
@@ -153,6 +159,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         for (const item of body.items) {
           out.push(
             await applyStockChange(tx, {
+              tenant: tenant(req),
               type: 'IN',
               productId: item.productId,
               warehouseId: body.warehouseId,
@@ -168,7 +175,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_IN', entity: 'StockMovement', changes: body });
-      await emit('inventory.movements.created', { movements });
+      await emit(tenant(req).companyId, 'inventory.movements.created', { movements });
       return { movements };
     },
   )
@@ -182,6 +189,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         for (const item of body.items) {
           out.push(
             await applyStockChange(tx, {
+              tenant: tenant(req),
               type: 'OUT',
               productId: item.productId,
               warehouseId: body.warehouseId,
@@ -195,8 +203,8 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_OUT', entity: 'StockMovement', changes: body });
-      await emit('inventory.movements.created', { movements });
-      await notifyLowStock(body.items.map((i) => i.productId));
+      await emit(tenant(req).companyId, 'inventory.movements.created', { movements });
+      await notifyLowStock(tenant(req).companyId, body.items.map((i) => i.productId));
       return { movements };
     },
   )
@@ -216,6 +224,7 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
           if (delta === 0) continue;
           out.push(
             await applyStockChange(tx, {
+              tenant: tenant(req),
               type: 'ADJUSTMENT',
               productId: item.productId,
               warehouseId: body.warehouseId,
@@ -229,8 +238,8 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
         return out;
       });
       await audit(req, { action: 'STOCK_ADJUSTMENT', entity: 'StockMovement', changes: body });
-      await emit('inventory.movements.created', { movements });
-      await notifyLowStock(body.items.map((i) => i.productId));
+      await emit(tenant(req).companyId, 'inventory.movements.created', { movements });
+      await notifyLowStock(tenant(req).companyId, body.items.map((i) => i.productId));
       return { movements };
     },
   )
@@ -243,14 +252,14 @@ export const inventoryRouter = new ApiRouter('/inventory', 'Inventario')
       const movements = await inTransaction(async (tx) => {
         const out = [];
         for (const item of body.items) {
-          const common = { productId: item.productId, transferId, reference: body.reference, note: body.note, userId: userId(req) };
+          const common = { tenant: tenant(req), productId: item.productId, transferId, reference: body.reference, note: body.note, userId: userId(req) };
           out.push(await applyStockChange(tx, { ...common, type: 'TRANSFER_OUT', warehouseId: body.fromWarehouseId, delta: -item.quantity }));
           out.push(await applyStockChange(tx, { ...common, type: 'TRANSFER_IN', warehouseId: body.toWarehouseId, delta: item.quantity }));
         }
         return out;
       });
       await audit(req, { action: 'STOCK_TRANSFER', entity: 'StockMovement', entityId: transferId, changes: body });
-      await emit('inventory.movements.created', { transferId, movements });
+      await emit(tenant(req).companyId, 'inventory.movements.created', { transferId, movements });
       return { transferId, movements };
     },
   );

@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Role } from '@prisma/client';
 import { api, auth, prisma, resetDb, setupUsers } from './helpers.js';
 import { formatRut, isValidRut, normalizeRut } from '../src/lib/rut.js';
 import { orderTotals } from '../src/modules/_shared/orders.js';
@@ -35,7 +34,7 @@ describe('IVA', () => {
 });
 
 describe('Reservas de stock, IVA en órdenes y webhooks', () => {
-  let t: Record<Role, string>;
+  let t: Awaited<ReturnType<typeof setupUsers>>;
   let warehouseId: string;
   let productId: string;
   let exemptId: string;
@@ -43,7 +42,7 @@ describe('Reservas de stock, IVA en órdenes y webhooks', () => {
   beforeAll(async () => {
     await resetDb();
     t = await setupUsers();
-    warehouseId = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'STGO', name: 'Santiago' })).body.id;
+    warehouseId = (await api().post('/api/v1/warehouses').set(auth(t.MANAGER)).send({ code: 'STGO', name: 'Santiago', branchId: t.company.branchId })).body.id;
     productId = (
       await api()
         .post('/api/v1/products')

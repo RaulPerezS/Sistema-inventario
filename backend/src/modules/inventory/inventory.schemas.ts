@@ -68,6 +68,7 @@ export const MovementOut = z
 
 export const MovementsQuery = PaginationQuery.extend({
   productId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional().openapi({ description: 'Filtrar por sucursal' }),
   warehouseId: z.string().uuid().optional(),
   type: MovementTypeEnum.optional(),
   from: DateFrom.optional(),
@@ -76,6 +77,7 @@ export const MovementsQuery = PaginationQuery.extend({
 
 export const StockQuery = PaginationQuery.extend({
   warehouseId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional().openapi({ description: 'Filtrar por sucursal' }),
   productId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   onlyAvailable: QueryBool.optional().openapi({ description: 'Solo registros con cantidad > 0' }),
@@ -90,6 +92,6 @@ export const StockOut = z
     available: z.number().int().openapi({ description: 'Disponible = físico − reservado' }),
     updatedAt: z.string().datetime(),
     product: z.object({ id: z.string(), sku: z.string(), name: z.string(), unit: z.string(), minStock: z.number(), costPrice: z.string() }),
-    warehouse: z.object({ id: z.string(), code: z.string(), name: z.string() }),
+    warehouse: z.object({ id: z.string(), code: z.string(), name: z.string(), branch: z.object({ id: z.string(), code: z.string(), name: z.string() }) }),
   })
   .openapi('StockLevel');

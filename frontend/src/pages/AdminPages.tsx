@@ -186,7 +186,7 @@ export function AuditPage() {
     <>
       <PageHeader title="Auditoría" description="Registro de todas las acciones realizadas en el sistema" />
       <div className="card">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+        <div className="border-b border-slate-200 p-4 dark:border-navy-800">
           <Select className="sm:w-56" value={entity} onChange={(e) => (setEntity(e.target.value), setPage(1))} aria-label="Entidad">
             <option value="">Todas las entidades</option>
             {entities.map((e) => (

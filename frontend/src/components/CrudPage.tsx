@@ -172,7 +172,7 @@ export function CrudPage<T extends { id: string }>(p: CrudPageProps<T>) {
         }
       />
       <div className="card">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-navy-800">
           <SearchInput
             value={search}
             onChange={(v) => {

@@ -156,6 +156,19 @@ La lista completa con esquemas, ejemplos y la opción de probar cada endpoint es
 
 ---
 
+## 🎨 Diseño visual
+
+La interfaz usa el sistema de diseño de **HGV Human Technology** ("Enterprise HCM Nexus"):
+
+| Rol | Color | Uso |
+|---|---|---|
+| Midnight Navy | `#0B192C` / `#1E3E62` | Barra de navegación, panel KPI destacado, login |
+| Electric Azure | `#008DDA` / `#00A9FF` | Estados interactivos, foco, enlaces, selección, series de datos |
+| Solar Orange | `#FF6500` / `#F58220` | Acciones principales (CTA), pendientes y alertas |
+| Neutros slate | `#F8FAFC` → `#0F172A` | Superficies, bordes y texto |
+
+Tipografías **Plus Jakarta Sans** (títulos y cifras) e **Inter** (texto y tablas). Todos los tokens (colores, sombras, series de gráficos) están centralizados en [`frontend/src/index.css`](frontend/src/index.css); los gráficos los leen en tiempo de ejecución, así que se adaptan también al modo oscuro.
+
 ## 🗂️ Estructura del proyecto
 
 ```

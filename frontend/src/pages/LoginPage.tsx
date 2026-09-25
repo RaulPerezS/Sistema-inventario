@@ -33,14 +33,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-white to-slate-100 px-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4">
+      <div className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-brand-500/20 blur-3xl" aria-hidden />
+      <div className="pointer-events-none absolute -bottom-40 -left-32 size-96 rounded-full bg-accent-500/10 blur-3xl" aria-hidden />
+      <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">
           <img src="/favicon.svg" alt="" className="mx-auto size-12" />
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Sistema de Inventario</h1>
-          <p className="mt-1 text-sm text-slate-500">Ingrese sus credenciales para continuar</p>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white">Sistema de Inventario</h1>
+          <p className="mt-1 text-sm text-brand-200">HGV Human Technology · Ingrese sus credenciales</p>
         </div>
-        <form onSubmit={submit} className="card space-y-4 p-6">
+        <form onSubmit={submit} className="card space-y-4 p-6 shadow-modal">
           <Field label="Correo electrónico">
             <Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@empresa.com" />
           </Field>
@@ -52,14 +54,14 @@ export default function LoginPage() {
           </Button>
         </form>
         {import.meta.env.DEV && (
-          <div className="mt-6 text-center text-xs text-slate-500">
+          <div className="mt-6 text-center text-xs text-slate-300">
             <p className="mb-2">Usuarios de demostración:</p>
             <div className="flex flex-wrap justify-center gap-2">
               {DEMO.map((d) => (
                 <button
                   key={d.email}
                   type="button"
-                  className="rounded-md border border-slate-300 px-2 py-1 hover:bg-white dark:border-slate-700 dark:hover:bg-slate-800"
+                  className="rounded-full border border-brand-500/40 px-3 py-1 text-brand-200 hover:bg-brand-500/15"
                   onClick={() => {
                     setEmail(d.email);
                     setPassword(d.password);

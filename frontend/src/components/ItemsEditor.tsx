@@ -38,9 +38,9 @@ export function ItemsEditor({
         onSelect={(p) => onChange([...items, { productId: p.id, sku: p.sku, name: p.name, unit: p.unit, quantity: '1', price: defaultPrice?.(p) }])}
       />
       {items.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-navy-800">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800/50">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-navy-800/50">
               <tr>
                 <th className="px-3 py-2 text-left">Producto</th>
                 <th className="w-32 px-3 py-2 text-left">{qtyLabel}</th>
@@ -49,7 +49,7 @@ export function ItemsEditor({
                 <th className="w-10" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-navy-800">
               {items.map((it, idx) => (
                 <tr key={it.productId}>
                   <td className="px-3 py-2">
@@ -77,7 +77,7 @@ export function ItemsEditor({
             </tbody>
             {priceLabel && (
               <tfoot>
-                <tr className="border-t border-slate-200 font-semibold dark:border-slate-800">
+                <tr className="border-t border-slate-200 font-semibold dark:border-navy-800">
                   <td colSpan={3} className="px-3 py-2 text-right">
                     Total
                   </td>

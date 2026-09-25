@@ -4,12 +4,17 @@ import clsx from 'clsx';
 import { ChevronLeft, ChevronRight, Inbox, Loader2, Search, X } from 'lucide-react';
 
 // ─────────── Botón ───────────
-type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type Variant = 'primary' | 'navy' | 'outline' | 'secondary' | 'danger' | 'ghost';
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm',
-  secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
+  // CTA principal: Solar Orange con brillo al pasar el cursor
+  primary: 'bg-accent-500 text-white hover:bg-accent-600 hover:shadow-cta shadow-sm',
+  // Acción estructural: navy corporativo
+  navy: 'bg-navy-950 text-white hover:bg-navy-800 dark:bg-brand-600 dark:hover:bg-brand-500',
+  // Acción técnica: contorno azure
+  outline: 'border border-brand-500 text-brand-600 hover:bg-brand-500/5 dark:text-brand-300',
+  secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-navy-800 dark:bg-navy-900 dark:text-slate-200 dark:hover:bg-navy-800',
   danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
-  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-navy-800',
 };
 
 export function Button({
@@ -25,8 +30,8 @@ export function Button({
   return (
     <button
       className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-60',
-        size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
+        'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand-500/30 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none',
+        size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'min-h-11 px-4 py-2 text-sm',
         variants[variant],
         className,
       )}
@@ -64,7 +69,7 @@ export const Select = ({ className, children, ...props }: SelectHTMLAttributes<H
 export function Checkbox({ label, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
     <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-      <input type="checkbox" className="size-4 rounded border-slate-300 text-brand-600 accent-brand-600" {...props} />
+      <input type="checkbox" className="size-[18px] rounded accent-brand-500" {...props} />
       {label}
     </label>
   );
@@ -81,26 +86,26 @@ export function SearchInput({ value, onChange, placeholder = 'Buscar…' }: { va
 
 // ─────────── Varios ───────────
 const tones = {
-  gray: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  blue: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-  green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-  red: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
-  violet: 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+  gray: 'bg-slate-100 text-slate-700 dark:bg-navy-800 dark:text-slate-300',
+  blue: 'bg-brand-500/12 text-sky-700 dark:text-brand-300',
+  green: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+  amber: 'bg-accent-500/12 text-accent-700 dark:text-accent-400',
+  red: 'bg-red-500/10 text-red-700 dark:text-red-300',
+  violet: 'bg-navy-950 text-white dark:bg-brand-500/20 dark:text-brand-200',
 };
 export type Tone = keyof typeof tones;
 
 export const Badge = ({ tone = 'gray', children }: { tone?: Tone; children: ReactNode }) => (
-  <span className={clsx('inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium', tones[tone])}>{children}</span>
+  <span className={clsx('inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-[0.02em]', tones[tone])}>{children}</span>
 );
 
-export const Spinner = ({ className }: { className?: string }) => <Loader2 className={clsx('size-5 animate-spin text-brand-600', className)} />;
+export const Spinner = ({ className }: { className?: string }) => <Loader2 className={clsx('size-5 animate-spin text-brand-500', className)} />;
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-navy-950 sm:text-[32px] sm:leading-10 dark:text-white">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -170,7 +175,7 @@ export function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-[8px]" onClick={onClose} aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
@@ -178,18 +183,18 @@ export function Modal({
         aria-label={title}
         tabIndex={-1}
         className={clsx(
-          'relative flex max-h-[90vh] w-full flex-col rounded-xl border border-slate-200 bg-white shadow-2xl outline-none dark:border-slate-800 dark:bg-slate-900',
+          'relative flex max-h-[90vh] w-full flex-col rounded-2xl border border-slate-200 bg-white shadow-modal outline-none dark:border-navy-800 dark:bg-navy-900',
           { md: 'max-w-lg', lg: 'max-w-3xl', xl: 'max-w-5xl' }[size],
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-navy-800">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" aria-label="Cerrar">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-navy-800" aria-label="Cerrar">
             <X className="size-5" />
           </button>
         </div>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-slate-800">{footer}</div>}
+        {footer && (!Array.isArray(footer) || footer.length > 0) && <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-navy-800">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -261,7 +266,7 @@ export function DataTable<T>({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+        <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-[0.04em] text-slate-500 dark:border-navy-800 dark:bg-navy-950/40 dark:text-slate-400">
           <tr>
             {columns.map((c) => (
               <th key={c.header} className={clsx('whitespace-nowrap px-4 py-3 font-medium', c.className)}>
@@ -270,7 +275,7 @@ export function DataTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+        <tbody className="divide-y divide-slate-100 dark:divide-navy-800">
           {loading && !rows ? (
             <tr>
               <td colSpan={columns.length} className="py-14 text-center">
@@ -282,7 +287,7 @@ export function DataTable<T>({
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={clsx('transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40', onRowClick && 'cursor-pointer')}
+                className={clsx('transition-colors hover:bg-slate-50 dark:hover:bg-navy-800/40', onRowClick && 'cursor-pointer')}
               >
                 {columns.map((c) => (
                   <td key={c.header} className={clsx('px-4 py-3', c.className)}>
@@ -307,7 +312,7 @@ export function Pagination({ meta, onPage }: { meta?: { page: number; totalPages
   const from = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
   const to = Math.min(meta.page * meta.limit, meta.total);
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800">
+    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-navy-800">
       <span>
         {from}–{to} de {meta.total}
       </span>
@@ -326,17 +331,36 @@ export function Pagination({ meta, onPage }: { meta?: { page: number; totalPages
   );
 }
 
-export function StatCard({ label, value, icon, tone = 'blue', hint }: { label: string; value: ReactNode; icon: ReactNode; tone?: Tone; hint?: string }) {
+export function StatCard({
+  label,
+  value,
+  icon,
+  tone = 'blue',
+  hint,
+  hero,
+}: {
+  label: string;
+  value: ReactNode;
+  icon: ReactNode;
+  tone?: Tone;
+  hint?: string;
+  /** Panel KPI destacado: degradado navy con acento cian. */
+  hero?: boolean;
+}) {
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-          {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-        </div>
-        <div className={clsx('rounded-lg p-2.5', tones[tone])}>{icon}</div>
+    <div
+      className={clsx(
+        'relative overflow-hidden rounded-2xl p-6',
+        hero ? 'bg-gradient-to-br from-navy-950 to-navy-800 text-white shadow-float' : 'card',
+      )}
+    >
+      {hero && <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-400 to-brand-500" aria-hidden />}
+      <div className="flex items-start justify-between gap-3">
+        <p className={clsx('pt-1 text-sm font-medium', hero ? 'text-brand-200' : 'text-slate-500 dark:text-slate-400')}>{label}</p>
+        <div className={clsx('shrink-0 rounded-xl p-2.5', hero ? 'bg-brand-400/15 text-brand-400' : tones[tone])}>{icon}</div>
       </div>
+      <p className={clsx('mt-1 font-display text-[26px] font-extrabold leading-tight tabular-nums', hero && 'text-white')}>{value}</p>
+      {hint && <p className={clsx('mt-1 text-xs', hero ? 'text-slate-300' : 'text-slate-500')}>{hint}</p>}
     </div>
   );
 }

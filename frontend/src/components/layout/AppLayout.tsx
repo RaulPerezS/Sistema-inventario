@@ -83,7 +83,7 @@ function ThemeToggle() {
     }
   };
   return (
-    <button onClick={toggle} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Cambiar tema">
+    <button onClick={toggle} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800" aria-label="Cambiar tema">
       {dark ? <Sun className="size-5" /> : <Moon className="size-5" />}
     </button>
   );
@@ -96,10 +96,10 @@ export function AppLayout() {
   const sidebar = (
     <nav className="flex h-full flex-col gap-6 overflow-y-auto px-3 py-5">
       <div className="flex items-center gap-2 px-3">
-        <img src="/favicon.svg" alt="" className="size-8" />
+        <img src="/favicon.svg" alt="" className="size-9" />
         <div>
-          <p className="font-semibold leading-tight">Inventario</p>
-          <p className="text-xs text-slate-500">Sistema de gestión</p>
+          <p className="font-display text-lg font-extrabold leading-tight text-white">Inventario</p>
+          <p className="text-xs font-medium text-brand-300">HGV Human Technology</p>
         </div>
       </div>
       {NAV.map((group) => {
@@ -107,7 +107,7 @@ export function AppLayout() {
         if (!items.length) return null;
         return (
           <div key={group.title}>
-            <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{group.title}</p>
+            <p className="mb-1 px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400/80">{group.title}</p>
             {items.map((item) => (
               <NavLink
                 key={item.to}
@@ -116,10 +116,10 @@ export function AppLayout() {
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition [&_svg]:size-4.5',
+                    'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition [&_svg]:size-4.5',
                     isActive
-                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-100'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                      ? 'bg-brand-500/15 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-400 [&_svg]:text-brand-400'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white',
                   )
                 }
               >
@@ -135,12 +135,12 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-200 bg-white lg:block dark:border-slate-800 dark:bg-slate-900">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-brand-500/20 bg-navy-950 lg:block">{sidebar}</aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 bg-white dark:bg-slate-900">
-            <button className="absolute right-2 top-2 p-2" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú">
+          <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-[8px]" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-64 bg-navy-950">
+            <button className="absolute right-2 top-2 p-2 text-slate-300" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú">
               <X className="size-5" />
             </button>
             {sidebar}
@@ -148,20 +148,20 @@ export function AppLayout() {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/80">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur sm:px-6 dark:border-navy-800 dark:bg-navy-950/80">
           <button className="rounded-lg p-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Abrir menú">
             <Menu className="size-5" />
           </button>
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
-            <NavLink to="/profile" className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
-              <UserCircle className="size-7 text-slate-400" />
+            <NavLink to="/profile" className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-navy-800">
+              <UserCircle className="size-7 text-brand-500" />
               <div className="hidden text-left sm:block">
                 <p className="text-sm font-medium leading-tight">{user?.name}</p>
                 <p className="text-xs text-slate-500">{user && ROLE_LABELS[user.role]}</p>
               </div>
             </NavLink>
-            <button onClick={logout} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Cerrar sesión" title="Cerrar sesión">
+            <button onClick={logout} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800" aria-label="Cerrar sesión" title="Cerrar sesión">
               <LogOut className="size-5" />
             </button>
           </div>

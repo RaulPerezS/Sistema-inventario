@@ -36,7 +36,7 @@ export function ProductPicker({ onSelect, excludeIds = [] }: { onSelect: (p: Pro
         className="pl-9"
       />
       {open && (
-        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-navy-800 dark:bg-navy-900">
           {isFetching && !data ? (
             <div className="p-4">
               <Spinner className="mx-auto" />
@@ -48,7 +48,7 @@ export function ProductPicker({ onSelect, excludeIds = [] }: { onSelect: (p: Pro
               <button
                 key={p.id}
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-navy-800"
                 onClick={() => {
                   onSelect(p);
                   setTerm('');

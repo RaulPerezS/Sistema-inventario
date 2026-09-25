@@ -133,7 +133,7 @@ function OrderDetail({ cfg, id, onClose }: { cfg: OrdersConfig; id: string; onCl
             </div>
           </div>
           {order.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{order.notes}</p>}
-          <div className="rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="rounded-lg border border-slate-200 dark:border-navy-800">
             <DataTable
               rowKey={(i) => i.id}
               rows={order.items}
@@ -145,7 +145,7 @@ function OrderDetail({ cfg, id, onClose }: { cfg: OrdersConfig; id: string; onCl
                 { header: 'Subtotal', className: 'text-right', cell: (i) => fmtMoney(Number(i[cfg.priceField]) * i.quantity) },
               ]}
             />
-            <div className="flex justify-end border-t border-slate-200 px-4 py-3 font-semibold dark:border-slate-800">Total: {fmtMoney(order.total)}</div>
+            <div className="flex justify-end border-t border-slate-200 px-4 py-3 font-semibold dark:border-navy-800">Total: {fmtMoney(order.total)}</div>
           </div>
         </div>
       )}
@@ -266,7 +266,7 @@ function OrdersPage({ cfg }: { cfg: OrdersConfig }) {
         }
       />
       <div className="card">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-navy-800">
           <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={`N° de orden o ${cfg.partyLabel.toLowerCase()}…`} />
           <Select className="sm:w-52" value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Estado">
             <option value="">Todos los estados</option>

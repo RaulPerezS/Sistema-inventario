@@ -75,13 +75,13 @@ function NewMovementModal({ onClose }: { onClose: () => void }) {
       }
     >
       <form id="movement-form" onSubmit={submit} className="space-y-4">
-        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 dark:bg-navy-800">
           {KINDS.filter((k) => can(k.role)).map((k) => (
             <button
               key={k.id}
               type="button"
               onClick={() => setKind(k.id)}
-              className={clsx('flex-1 rounded-md px-3 py-1.5 text-sm font-medium', kind === k.id ? 'bg-white shadow-sm dark:bg-slate-900' : 'text-slate-500')}
+              className={clsx('flex-1 rounded-md px-3 py-1.5 text-sm font-medium', kind === k.id ? 'bg-white shadow-sm dark:bg-navy-900' : 'text-slate-500')}
             >
               {k.label}
             </button>
@@ -146,7 +146,7 @@ export default function MovementsPage() {
         description="Historial completo de entradas, salidas, ajustes y transferencias"
         actions={
           <>
-            <Button variant="secondary" icon={<Download className="size-4" />} onClick={() => download('/inventory/movements/export', filters)}>
+            <Button variant="outline" icon={<Download className="size-4" />} onClick={() => download('/inventory/movements/export', filters)}>
               Exportar CSV
             </Button>
             {can('OPERATOR') && (
@@ -158,7 +158,7 @@ export default function MovementsPage() {
         }
       />
       <div className="card">
-        <div className="flex flex-col flex-wrap gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+        <div className="flex flex-col flex-wrap gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-navy-800">
           <SearchInput value={search} onChange={reset(setSearch)} placeholder="Producto, SKU o referencia…" />
           <Select className="sm:w-44" value={type} onChange={(e) => reset(setType)(e.target.value as MovementType)} aria-label="Tipo">
             <option value="">Todos los tipos</option>

@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fmtMoney, fmtNumber, MOVEMENT_LABELS } from '@/lib/format';
 import { useGet } from '@/hooks/useApi';
+import { useThemeColors } from '@/lib/theme';
 import { Badge, DataTable, Field, Input, PageHeader, Select } from '@/components/ui';
-
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#84cc16'];
 
 interface Valuation {
   id: string | null;
@@ -42,6 +41,8 @@ interface Sales {
 const monthAgo = () => new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
 
 export default function ReportsPage() {
+  const c = useThemeColors();
+  const COLORS = c.series;
   const [groupBy, setGroupBy] = useState<'category' | 'warehouse'>('category');
   const [from, setFrom] = useState(monthAgo());
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
@@ -112,11 +113,11 @@ export default function ReportsPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={top.data ?? []} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-                <YAxis type="category" dataKey="sku" tick={{ fontSize: 12 }} stroke="#94a3b8" width={70} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={c['chart-grid']} />
+                <XAxis type="number" tick={{ fontSize: 12 }} stroke={c['chart-axis']} allowDecimals={false} />
+                <YAxis type="category" dataKey="sku" tick={{ fontSize: 12 }} stroke={c['chart-axis']} width={70} />
                 <Tooltip formatter={(v) => fmtNumber(Number(v))} labelFormatter={(sku) => top.data?.find((t) => t.sku === sku)?.name ?? sku} />
-                <Bar dataKey="units" name="Unidades" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="units" name="Unidades" fill={c['accent-500']} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -131,18 +132,18 @@ export default function ReportsPage() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sales.data?.byDay.map((d) => ({ ...d, revenue: Number(d.revenue) })) ?? []}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={c['chart-grid']} />
+                <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fontSize: 12 }} stroke={c['chart-axis']} />
+                <YAxis tick={{ fontSize: 12 }} stroke={c['chart-axis']} />
                 <Tooltip formatter={(v) => fmtMoney(Number(v))} />
-                <Bar dataKey="revenue" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" name="Ingresos" fill={c['navy-800']} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="card">
-          <h2 className="border-b border-slate-200 p-4 font-semibold dark:border-slate-800">Movimientos por tipo</h2>
+          <h2 className="border-b border-slate-200 p-4 font-semibold dark:border-navy-800">Movimientos por tipo</h2>
           <DataTable
             rowKey={(r) => r.type}
             rows={movements.data?.byType}
@@ -158,7 +159,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="card mt-4">
-        <h2 className="border-b border-slate-200 p-4 font-semibold dark:border-slate-800">Reposición sugerida (stock bajo)</h2>
+        <h2 className="border-b border-slate-200 p-4 font-semibold dark:border-navy-800">Reposición sugerida (stock bajo)</h2>
         <DataTable
           rowKey={(r) => r.id}
           rows={low.data}

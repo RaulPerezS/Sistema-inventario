@@ -18,7 +18,7 @@ export default function StockPage() {
     <>
       <PageHeader title="Existencias" description="Stock disponible por producto y almacén" />
       <div className="card">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-navy-800">
           <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder="Producto o SKU…" />
           <Select className="sm:w-56" value={warehouseId} onChange={(e) => (setWarehouseId(e.target.value), setPage(1))} aria-label="Almacén">
             <option value="">Todos los almacenes</option>

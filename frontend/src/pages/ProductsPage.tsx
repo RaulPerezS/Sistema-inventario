@@ -41,7 +41,7 @@ function ProductDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="flex flex-wrap gap-2">
               {p.stocks?.length ? (
                 p.stocks.map((s) => (
-                  <div key={s.warehouse.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                  <div key={s.warehouse.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-navy-800">
                     <span className="text-slate-500">{s.warehouse.name}:</span> <span className="font-semibold">{fmtNumber(s.quantity)}</span>
                   </div>
                 ))
@@ -52,7 +52,7 @@ function ProductDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
           <div>
             <h3 className="mb-2 font-semibold">Kardex</h3>
-            <div className="rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="rounded-lg border border-slate-200 dark:border-navy-800">
               <DataTable
                 rowKey={(m) => m.id}
                 rows={kardex.data?.data}
@@ -147,7 +147,7 @@ export default function ProductsPage() {
         description="Catálogo de productos y sus existencias"
         actions={
           <>
-            <Button variant="secondary" icon={<Download className="size-4" />} onClick={() => download('/products/export', filters)}>
+            <Button variant="outline" icon={<Download className="size-4" />} onClick={() => download('/products/export', filters)}>
               Exportar CSV
             </Button>
             {can('MANAGER') && (
@@ -159,7 +159,7 @@ export default function ProductsPage() {
         }
       />
       <div className="card">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-navy-800">
           <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder="Nombre, SKU o código de barras…" />
           <Select className="sm:w-56" value={categoryId} onChange={(e) => (setCategoryId(e.target.value), setPage(1))} aria-label="Categoría">
             <option value="">Todas las categorías</option>
@@ -243,7 +243,7 @@ export default function ProductsPage() {
         <form id="product-form" onSubmit={submit} className="space-y-4">
           <ResourceForm fields={fields} values={values} onChange={setValues} isEdit={!!editing} />
           {!editing && (
-            <div className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+            <div className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-navy-800">
               <p className="mb-3 text-sm font-medium">Stock inicial (opcional)</p>
               <ResourceForm fields={initialStockFields} values={values} onChange={setValues} isEdit={false} />
             </div>

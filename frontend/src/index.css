@@ -1,35 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 @import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * ─────────── Sistema de diseño HGV Human · "Enterprise HCM Nexus" ───────────
+ * Toda la identidad visual se define aquí (la UI y los gráficos toman estos tokens).
+ *  - Navy (#0B192C): estructura — navegación, encabezados, paneles KPI.
+ *  - Brand / Electric Azure (#008DDA): estados interactivos, foco, enlaces, selección.
+ *  - Accent / Solar Orange (#FF6500): acciones principales (CTA) y prioridades.
+ */
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Midnight Navy */
+  --color-navy-950: #0b192c;
+  --color-navy-900: #13294a;
+  --color-navy-800: #1e3e62;
+  --color-navy-700: #2c5282;
+
+  /* Electric Azure (interactivo) */
+  --color-brand-50: #eef8fe;
+  --color-brand-100: #cee5ff;
+  --color-brand-200: #96cbff;
+  --color-brand-300: #48afff;
+  --color-brand-400: #00a9ff;
+  --color-brand-500: #008dda;
+  --color-brand-600: #0077ba;
+  --color-brand-700: #00639b;
+  --color-brand-800: #004a76;
+  --color-brand-900: #001d33;
+
+  /* Solar Orange (CTA y alertas) */
+  --color-accent-400: #f58220;
+  --color-accent-500: #ff6500;
+  --color-accent-600: #e85a00;
+  --color-accent-700: #c2410c;
+
+  /* Estados */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* Neutros: el más oscuro se alinea al navy de la marca (evita el negro puro) */
+  --color-slate-950: #0b192c;
+
+  /* Series de gráficos (en orden de uso) */
+  --color-chart-1: var(--color-brand-500);
+  --color-chart-2: var(--color-accent-500);
+  --color-chart-3: var(--color-navy-800);
+  --color-chart-4: var(--color-success);
+  --color-chart-5: var(--color-brand-300);
+  --color-chart-6: var(--color-warning);
+  --color-chart-7: var(--color-accent-400);
+  --color-chart-8: var(--color-danger);
+  --color-chart-grid: #e2e8f0;
+  --color-chart-axis: #64748b;
+
+  /* Elevación con sombras tintadas en navy */
+  --shadow-card: 0 1px 3px rgba(11, 25, 44, 0.05), 0 10px 15px -3px rgba(11, 25, 44, 0.03);
+  --shadow-float: 0 20px 25px -5px rgba(11, 25, 44, 0.08), 0 8px 10px -6px rgba(11, 25, 44, 0.05);
+  --shadow-modal: 0 25px 50px -12px rgba(11, 25, 44, 0.25);
+  --shadow-cta: 0 4px 14px rgba(255, 101, 0, 0.35);
+}
+
+.dark {
+  --color-chart-grid: #1e3e62;
+  --color-chart-axis: #94a3b8;
+  --color-chart-3: #96cbff;
 }
 
 @layer base {
   html {
-    @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    @apply bg-slate-50 text-slate-900 antialiased dark:bg-navy-950 dark:text-slate-100;
   }
   body {
     @apply min-h-screen;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+  }
+  table {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
   .input {
-    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition
-      placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60
-      dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500;
+    @apply block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition
+      placeholder:text-slate-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60
+      dark:border-navy-800 dark:bg-navy-900 dark:text-slate-100 dark:placeholder:text-slate-500;
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+    @apply rounded-2xl border border-slate-200 bg-white shadow-card dark:border-navy-800 dark:bg-navy-900;
   }
   .label {
-    @apply mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300;
+    @apply mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-300;
   }
 }

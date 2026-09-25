@@ -1,0 +1,342 @@
+// Esquema de datos del Sistema de Inventario
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Seguridad ───────────────────────────────
+
+enum Role {
+  ADMIN // Control total: usuarios, API keys, auditoría
+  MANAGER // Catálogo, órdenes y reportes
+  OPERATOR // Movimientos de stock y operación de órdenes
+  VIEWER // Solo lectura
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(VIEWER)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  refreshTokens  RefreshToken[]
+  apiKeys        ApiKey[]
+  movements      StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  salesOrders    SalesOrder[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  userAgent String?
+  ip        String?
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  prefix      String    @unique
+  keyHash     String    @unique
+  role        Role      @default(VIEWER)
+  createdById String    @db.Uuid
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  auditLogs AuditLog[]
+
+  @@map("api_keys")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKeyId  String?  @db.Uuid
+  apiKey    ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  action    String // CREATE, UPDATE, DELETE, LOGIN, STOCK_IN, ...
+  entity    String // Product, Warehouse, ...
+  entityId  String?
+  changes   Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────── Catálogo ───────────────────────────────
+
+model Category {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @unique
+  description String?
+  parentId    String?    @db.Uuid
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("categories")
+}
+
+model Supplier {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  taxId       String?  @unique
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  taxId     String?  @unique
+  email     String?
+  phone     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrders SalesOrder[]
+
+  @@map("customers")
+}
+
+model Warehouse {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stocks         Stock[]
+  movements      StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  salesOrders    SalesOrder[]
+
+  @@map("warehouses")
+}
+
+model Product {
+  id          String    @id @default(uuid()) @db.Uuid
+  sku         String    @unique
+  barcode     String?   @unique
+  name        String
+  description String?
+  unit        String    @default("UND")
+  categoryId  String?   @db.Uuid
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplierId  String?   @db.Uuid
+  supplier    Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  costPrice   Decimal   @default(0) @db.Decimal(14, 2)
+  salePrice   Decimal   @default(0) @db.Decimal(14, 2)
+  minStock    Int       @default(0)
+  maxStock    Int?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  stocks             Stock[]
+  movements          StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+  salesOrderItems    SalesOrderItem[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// ─────────────────────────────── Inventario ───────────────────────────────
+
+model Stock {
+  productId   String    @db.Uuid
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String    @db.Uuid
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  @@id([productId, warehouseId])
+  @@map("stocks")
+}
+
+enum MovementType {
+  IN // Entrada manual
+  OUT // Salida manual
+  ADJUSTMENT // Ajuste por conteo físico (+/-)
+  TRANSFER_IN // Entrada por transferencia entre almacenes
+  TRANSFER_OUT // Salida por transferencia entre almacenes
+  PURCHASE // Recepción de orden de compra
+  SALE // Despacho de orden de venta
+}
+
+model StockMovement {
+  id              String         @id @default(uuid()) @db.Uuid
+  type            MovementType
+  productId       String         @db.Uuid
+  product         Product        @relation(fields: [productId], references: [id])
+  warehouseId     String         @db.Uuid
+  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
+  quantity        Int // Con signo: positivo entra, negativo sale
+  balanceAfter    Int
+  unitCost        Decimal?       @db.Decimal(14, 2)
+  reference       String?
+  note            String?
+  transferId      String?        @db.Uuid
+  purchaseOrderId String?        @db.Uuid
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  salesOrderId    String?        @db.Uuid
+  salesOrder      SalesOrder?    @relation(fields: [salesOrderId], references: [id])
+  userId          String?        @db.Uuid
+  user            User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+
+  @@index([productId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([type])
+  @@map("stock_movements")
+}
+
+// ─────────────────────────────── Órdenes ───────────────────────────────
+
+model Sequence {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("sequences")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid()) @db.Uuid
+  number       String              @unique
+  supplierId   String              @db.Uuid
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  warehouseId  String              @db.Uuid
+  warehouse    Warehouse           @relation(fields: [warehouseId], references: [id])
+  status       PurchaseOrderStatus @default(DRAFT)
+  expectedDate DateTime?
+  notes        String?
+  total        Decimal             @default(0) @db.Decimal(14, 2)
+  createdById  String?             @db.Uuid
+  createdBy    User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  orderedAt    DateTime?
+  receivedAt   DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  items     PurchaseOrderItem[]
+  movements StockMovement[]
+
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               String        @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String        @db.Uuid
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId        String        @db.Uuid
+  product          Product       @relation(fields: [productId], references: [id])
+  quantity         Int
+  receivedQuantity Int           @default(0)
+  unitCost         Decimal       @db.Decimal(14, 2)
+
+  @@unique([purchaseOrderId, productId])
+  @@map("purchase_order_items")
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  FULFILLED
+  CANCELLED
+}
+
+model SalesOrder {
+  id          String           @id @default(uuid()) @db.Uuid
+  number      String           @unique
+  customerId  String?          @db.Uuid
+  customer    Customer?        @relation(fields: [customerId], references: [id])
+  warehouseId String           @db.Uuid
+  warehouse   Warehouse        @relation(fields: [warehouseId], references: [id])
+  status      SalesOrderStatus @default(DRAFT)
+  notes       String?
+  total       Decimal          @default(0) @db.Decimal(14, 2)
+  createdById String?          @db.Uuid
+  createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  confirmedAt DateTime?
+  fulfilledAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  items     SalesOrderItem[]
+  movements StockMovement[]
+
+  @@index([status])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid()) @db.Uuid
+  salesOrderId String     @db.Uuid
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String     @db.Uuid
+  product      Product    @relation(fields: [productId], references: [id])
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(14, 2)
+
+  @@unique([salesOrderId, productId])
+  @@map("sales_order_items")
+}
